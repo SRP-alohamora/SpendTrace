@@ -206,11 +206,14 @@ async def ingest_receipt(
     trace_id = f"tr_{uuid.uuid4().hex[:8]}"
     Tracer.start_trace(trace_id, f"Uploaded Receipt: {file.filename}", "receipt_upload", user_id=current_user["id"])
 
+    is_pdf = file.filename.lower().endswith(".pdf") or file.content_type == "application/pdf"
+    raw_type = "receipt_pdf" if is_pdf else "receipt_image"
+
     initial_state = {
         "trace_id": trace_id,
         "session_id": session_id,
         "user_id": current_user["id"],
-        "raw_input_type": "receipt_image",
+        "raw_input_type": raw_type,
         "raw_content": contents,
         "filename": file.filename,
         "messages": [{"role": "user", "content": f"Uploaded receipt: {file.filename}"}],
@@ -348,6 +351,18 @@ def export_csv(current_user: Dict[str, Any] = Depends(get_current_user)):
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=spendtrace_ledger_{current_user['email'].split('@')[0]}.csv"}
+    )
+
+@app.get("/api/v1/download/submission.docx")
+def download_submission_docx():
+    docx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "submission.docx")
+    if not os.path.exists(docx_path):
+        raise HTTPException(status_code=404, detail="submission.docx not found")
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=docx_path,
+        filename="submission.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
 # =============================================================

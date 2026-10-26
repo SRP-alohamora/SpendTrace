@@ -3,9 +3,11 @@
 > **"Never lose money to forgotten returns or mystery charges again."**
 
 [![Live Demo on GitHub Pages](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-1a73e8?style=for-the-badge&logo=github)](https://srp-alohamora.github.io/SpendTrace/)
+[![Download submission.docx](https://img.shields.io/badge/Download-submission.docx-34A853?style=for-the-badge&logo=microsoftword)](https://srp-alohamora.github.io/SpendTrace/submission.docx)
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/SRP-alohamora/SpendTrace)
 
 * **🌐 Live Web Application (GitHub Pages):** [https://srp-alohamora.github.io/SpendTrace/](https://srp-alohamora.github.io/SpendTrace/)
+* **📄 Download Official Submission Document:** [submission.docx](file:///Users/shivanipradhan/GithubProjects/SpendTrace/submission.docx) ([GitHub Pages Direct Download](https://srp-alohamora.github.io/SpendTrace/submission.docx))
 * **📦 GitHub Repository:** [https://github.com/SRP-alohamora/SpendTrace](https://github.com/SRP-alohamora/SpendTrace)
 
 ---
@@ -35,7 +37,7 @@ SpendTrace implements a **pure-white, sparse, Google Workspace / Material 3 inte
 ## Key Capabilities & Architecture Pillars
 
 * **Multi-Tenant Supabase Open-Source Auth & IAM:** Compatible with [SRP-alohamora/supabase-opensrc-auth](https://github.com/SRP-alohamora/supabase-opensrc-auth) (GoTrue JWT standard). Distinguishes `admin` and `member` roles, featuring a top-bar user switcher and an IAM elevation barrier.
-* **Clean Slate Invariant for New Users:** Any newly registered user account starts 100% clean with **0 transactions, 0 receipts, and 0 returns**. All newly uploaded receipts, CSV statements, and conversational expenses are saved persistently into the database scoped to their private user ID.
+* **Account Data Isolation for New Users:** Any newly registered user account is scoped to their private user ID with **0 transactions, 0 receipts, and 0 returns**. All newly uploaded receipts (PDFs, images), CSV statements, and conversational expenses are saved persistently into PostgreSQL/SQLite.
 * **Public Demonstration with Fictional Data:** An included pre-seeded demo admin account (`admin@spendtrace.ai`) comes loaded with 11 realistic benchmark transactions and return slips, enabling visitors to test refund radar, duplicate detection, and analytics immediately without entering personal data.
 * **Grounded Facts & Source-Linked Provenance:** When users query spending trends (*"Why did my spending increase?"* or *"Which returns have no matching refund?"*), the agent computes mathematical answers exclusively via sandboxed SQL database queries. Explanations cite exact transaction primary keys (e.g. `tx_4a1f...`) as clickable provenance chips—**zero hallucinated numbers**.
 * **The "Refund Radar":** Consumers routinely return purchases online or in-store but forget to check if the refund actually posts 5–14 days later. SpendTrace tracks return slips and proactively alerts you when a merchant fails to refund your money.

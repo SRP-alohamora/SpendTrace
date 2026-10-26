@@ -52,7 +52,7 @@ def ingestion_extraction_node(state: AgentState) -> Dict[str, Any]:
     filename = state.get("filename", "unknown.jpg")
 
     extracted = []
-    if raw_type == "receipt_image":
+    if raw_type in ("receipt_image", "receipt_pdf"):
         contract = IngestionExtractor.parse_receipt_image(raw_content, filename)
         extracted.append(contract.model_dump())
     elif raw_type == "csv_file":
@@ -62,8 +62,8 @@ def ingestion_extraction_node(state: AgentState) -> Dict[str, Any]:
         contract = IngestionExtractor.parse_natural_language_expense(str(raw_content))
         extracted.append(contract.model_dump())
 
-    tokens_in = 1200 if raw_type == "receipt_image" else 250
-    tokens_out = 240 if raw_type == "receipt_image" else 80
+    tokens_in = 1200 if raw_type in ("receipt_image", "receipt_pdf") else 250
+    tokens_out = 240 if raw_type in ("receipt_image", "receipt_pdf") else 80
 
     Tracer.log_span(
         trace_id=state["trace_id"],

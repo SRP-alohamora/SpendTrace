@@ -751,8 +751,45 @@ input, textarea, select {
   border-color: var(--border-color);
 }
 
-/* Clean Slate Hero State */
-.clean-slate-card {
+.user-menu-item.logout-item {
+  color: var(--google-red);
+}
+
+.user-menu-item.logout-item:hover {
+  background-color: #fce8e6;
+  border-color: #fad2cf;
+}
+
+/* Header Action Buttons: Logout & Sign In */
+.logout-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.logout-nav-btn:hover {
+  background: #fce8e6;
+  border-color: #fad2cf;
+  color: var(--google-red);
+}
+
+.signin-nav-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+/* Empty State Card */
+.empty-state-card, .clean-slate-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -765,7 +802,7 @@ input, textarea, select {
   margin: 16px;
 }
 
-.clean-slate-icon {
+.empty-state-icon, .clean-slate-icon {
   width: 56px;
   height: 56px;
   border-radius: 50%;

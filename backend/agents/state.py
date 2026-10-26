@@ -86,7 +86,7 @@ class AgentState(TypedDict):
     user_id: Optional[str]
     
     # User Input
-    raw_input_type: Literal["receipt_image", "csv_file", "nl_expense", "nl_query", "hitl_resume"]
+    raw_input_type: Literal["receipt_image", "receipt_pdf", "csv_file", "nl_expense", "nl_query", "hitl_resume"]
     raw_content: Any
     filename: Optional[str]
     

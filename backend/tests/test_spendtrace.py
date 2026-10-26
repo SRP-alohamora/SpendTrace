@@ -138,3 +138,13 @@ def test_grounded_facts_provenance():
     )
     assert len(results) == len(query_contract.cited_transaction_ids), "All facts must be grounded in real transactions"
 
+def test_pdf_receipt_ingestion_and_formats():
+    from backend.agents.extractor import IngestionExtractor
+    # Verify PDF receipts are accepted and extracted cleanly
+    fake_pdf_bytes = b"%PDF-1.4 Fake Apple Store PDF Receipt Content"
+    contract = IngestionExtractor.parse_receipt_image(fake_pdf_bytes, "apple_store_invoice.pdf")
+    assert contract.merchant_name == "Apple Store"
+    assert contract.total_amount > 0
+    assert len(contract.line_items) > 0
+    assert "PDF" in contract.line_items[0].name or "AppleCare" in contract.line_items[0].name
+
