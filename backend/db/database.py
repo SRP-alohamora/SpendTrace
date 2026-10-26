@@ -157,6 +157,15 @@ def seed_users(conn):
                VALUES (?, ?, ?, ?, ?, ?)""",
             (DEMO_MEMBER_ID, "newuser@spendtrace.ai", hash_password("userpassword123"), "member", "New User", datetime.utcnow().isoformat())
         )
+    
+    # 3. Seeded user shivani
+    cur.execute("SELECT id FROM users WHERE email = ? OR email LIKE ?", ("shivani@spendtrace.ai", "shivani@%"))
+    if not cur.fetchone():
+        cur.execute(
+            """INSERT INTO users (id, email, password_hash, role, full_name, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("00000000-0000-0000-0000-000000000003", "shivani@spendtrace.ai", hash_password("Password123!@#"), "member", "Shivani", datetime.utcnow().isoformat())
+        )
     conn.commit()
 
 def seed_admin_demo_data(conn):

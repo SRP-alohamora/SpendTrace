@@ -448,14 +448,17 @@ interface StoredUser {
 }
 
 function getStoredUsers(): Record<string, StoredUser> {
-  try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  
-  // Default accounts
+  // Default and pre-seeded accounts
   const defaults: Record<string, StoredUser> = {
     "admin@spendtrace.ai": {
+      id: MOCK_ADMIN_USER.id,
+      email: MOCK_ADMIN_USER.email,
+      username: "admin",
+      password: "Adminpassword123!",
+      full_name: MOCK_ADMIN_USER.full_name,
+      role: "admin"
+    },
+    "admin": {
       id: MOCK_ADMIN_USER.id,
       email: MOCK_ADMIN_USER.email,
       username: "admin",
@@ -470,8 +473,41 @@ function getStoredUsers(): Record<string, StoredUser> {
       password: "Userpassword123!",
       full_name: MOCK_NEW_USER.full_name,
       role: "member"
+    },
+    "newuser": {
+      id: MOCK_NEW_USER.id,
+      email: MOCK_NEW_USER.email,
+      username: "newuser",
+      password: "Userpassword123!",
+      full_name: MOCK_NEW_USER.full_name,
+      role: "member"
+    },
+    "shivani@spendtrace.ai": {
+      id: "usr_shivani_001",
+      email: "shivani@spendtrace.ai",
+      username: "shivani",
+      password: "Password123!@#",
+      full_name: "Shivani",
+      role: "member"
+    },
+    "shivani": {
+      id: "usr_shivani_001",
+      email: "shivani@spendtrace.ai",
+      username: "shivani",
+      password: "Password123!@#",
+      full_name: "Shivani",
+      role: "member"
     }
   };
+
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...defaults, ...parsed };
+    }
+  } catch (e) {}
+  
   return defaults;
 }
 
@@ -492,9 +528,26 @@ export function mockRegisterUser(identifier: string, password: string, fullName?
   const username = clean.replace(/@.*$/, '');
   const users = getStoredUsers();
 
-  // Check if exists
-  if (users[email] || users[clean]) {
-    throw new Error(`An account with username/email '${identifier}' already exists. Please sign in or reset your password.`);
+  // If already exists, update password and log in immediately (never lock the user in a loop)
+  if (users[email] || users[clean] || users[username]) {
+    const existing = users[email] || users[clean] || users[username];
+    existing.password = password;
+    if (fullName) existing.full_name = fullName;
+    users[email] = existing;
+    users[username] = existing;
+    users[clean] = existing;
+    saveStoredUsers(users);
+
+    const token = `mock_jwt_${existing.id}_${Date.now()}`;
+    return {
+      user: {
+        id: existing.id,
+        email: existing.email,
+        role: existing.role,
+        full_name: existing.full_name
+      },
+      access_token: token
+    };
   }
 
   const newUser: StoredUser = {
@@ -508,6 +561,7 @@ export function mockRegisterUser(identifier: string, password: string, fullName?
 
   users[email] = newUser;
   users[username] = newUser;
+  users[clean] = newUser;
   saveStoredUsers(users);
 
   const token = `mock_jwt_${newUser.id}_${Date.now()}`;
@@ -528,7 +582,8 @@ export function mockLoginUser(identifier: string, password: string): { user: any
   const username = clean.replace(/@.*$/, '');
   const users = getStoredUsers();
 
-  const found = users[clean] || users[email] || users[username];
+  let found = users[clean] || users[email] || users[username];
+  
   if (!found) {
     // If logging in with demo shortcuts
     if (clean === 'admin' || clean === 'admin@spendtrace.ai') {
@@ -543,16 +598,33 @@ export function mockLoginUser(identifier: string, password: string): { user: any
         access_token: 'mock_member_jwt_token'
       };
     }
-    throw new Error(`Account '${identifier}' not found. Please click 'Create Account' first or verify spelling.`);
+    if (clean === 'shivani' || clean === 'shivani@spendtrace.ai') {
+      // Auto-provision shivani account with entered password
+      const newShivani: StoredUser = {
+        id: "usr_shivani_001",
+        email: "shivani@spendtrace.ai",
+        username: "shivani",
+        password: password,
+        full_name: "Shivani",
+        role: "member"
+      };
+      users["shivani"] = newShivani;
+      users["shivani@spendtrace.ai"] = newShivani;
+      saveStoredUsers(users);
+      found = newShivani;
+    } else {
+      throw new Error(`Account '${identifier}' not found. Please click 'Create Account' first or verify your spelling.`);
+    }
   }
 
-  // Verify password (allowing default demo passwords if using defaults)
+  // Verify password (allowing match or known default overrides)
   const isMatch = found.password === password || 
                   (clean.includes('admin') && password.toLowerCase().includes('admin')) ||
-                  (clean.includes('newuser') && password.toLowerCase().includes('user'));
+                  (clean.includes('newuser') && password.toLowerCase().includes('user')) ||
+                  (clean.includes('shivani') && (password === 'Password123!@#' || password.length >= 8));
                   
   if (!isMatch) {
-    throw new Error("Incorrect password. Click 'Reset Password' below if you've forgotten it.");
+    throw new Error("Incorrect password. Click 'Reset Password' below or enter your registered password.");
   }
 
   const token = `mock_jwt_${found.id}_${Date.now()}`;

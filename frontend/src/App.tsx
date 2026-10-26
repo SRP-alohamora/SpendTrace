@@ -395,8 +395,19 @@ export default function App() {
       });
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        const data = await res.json();
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          throw new Error("OfflineFallbackTrigger");
+        }
         if (!res.ok) {
+          if (authTab === 'signup' && (data.detail?.includes('already exists') || data.detail?.includes('already registered'))) {
+            setAuthTab('login');
+            setAuthError(`Account '${authEmail}' is already registered! Please enter your password to Login / Enter.`);
+            setAuthLoading(false);
+            return;
+          }
           throw new Error(data.detail || 'Authentication failed');
         }
         if (data.user) {
@@ -430,8 +441,16 @@ export default function App() {
       // If response was not JSON (e.g. 404 HTML on static GitHub Pages)
       throw new Error("OfflineFallbackTrigger");
     } catch (err: any) {
-      if (err.message !== "OfflineFallbackTrigger" && !err.message.includes("Unexpected token") && !err.message.includes("Failed to fetch")) {
-        setAuthError(err.message || 'Authentication error');
+      const errMsg = err?.message || '';
+      if (authTab === 'signup' && (errMsg.includes('already exists') || errMsg.includes('already registered'))) {
+        setAuthTab('login');
+        setAuthError(`Account '${authEmail}' is already registered! Please enter your password to Login / Enter.`);
+        setAuthLoading(false);
+        return;
+      }
+      if (errMsg !== "OfflineFallbackTrigger" && !errMsg.includes("Unexpected token") && !errMsg.includes("Failed to fetch") && !errMsg.includes("JSON") && !errMsg.includes("token")) {
+        setAuthError(errMsg);
+        setAuthLoading(false);
         return;
       }
       // Resilient browser user registry simulation (zero 'Unexpected token' errors on GitHub Pages)
@@ -468,7 +487,12 @@ export default function App() {
           }, 1200);
         }
       } catch (mockErr: any) {
-        setAuthError(mockErr.message || 'Authentication error');
+        if (mockErr?.message?.includes('already exists')) {
+          setAuthTab('login');
+          setAuthError(`Account '${authEmail}' is already registered! Please enter your password to Login / Enter.`);
+        } else {
+          setAuthError(mockErr.message || 'Authentication error');
+        }
       }
     } finally {
       setAuthLoading(false);
@@ -834,10 +858,10 @@ export default function App() {
             <button 
               className="primary-btn signin-nav-btn"
               onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
-              title="Sign In to SpendTrace"
+              title="Login / Enter SpendTrace"
             >
               <Key size={14} />
-              <span>Sign In</span>
+              <span>Login / Enter</span>
             </button>
           )}
 
@@ -929,7 +953,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="user-menu-item" onClick={() => { setShowUserDropdown(false); setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}>
-                    <span>Sign In / Sign Up</span>
+                    <span>Login / Enter</span>
                     <Key size={14} />
                   </div>
                 )}
@@ -1673,7 +1697,7 @@ export default function App() {
                 }}
                 onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); }}
               >
-                Sign In
+                Login / Enter
               </button>
               <button 
                 style={{ 
@@ -1761,26 +1785,35 @@ export default function App() {
                 />
               </div>
 
-              {/* Password Guidance & Real-time Policy Checklist */}
-              {(authTab === 'signup' || authTab === 'reset') && (() => {
+              {/* Universal Password Guidance & Real-time Policy Checklist */}
+              {(() => {
                 const p = validatePasswordStrength(authPassword);
+                const showChecklist = authTab === 'signup' || authTab === 'reset' || authPassword.length > 0;
                 return (
                   <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px 12px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>
-                      Password Policy (Required):
+                      Password Guidance & Complexity Rules:
                     </div>
-                    <div style={{ color: p.hasMinLength ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                      {p.hasMinLength ? '✓' : '○'} Minimum 10 digits / characters
-                    </div>
-                    <div style={{ color: p.hasUpper ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                      {p.hasUpper ? '✓' : '○'} At least 1 capital letter (A–Z)
-                    </div>
-                    <div style={{ color: p.hasLower ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                      {p.hasLower ? '✓' : '○'} At least 1 small letter (a–z)
-                    </div>
-                    <div style={{ color: p.hasSpecial ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                      {p.hasSpecial ? '✓' : '○'} At least 1 special character (!@#$%^&*...)
-                    </div>
+                    {showChecklist ? (
+                      <>
+                        <div style={{ color: p.hasMinLength ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                          {p.hasMinLength ? '✓' : '○'} Minimum 10 digits / characters
+                        </div>
+                        <div style={{ color: p.hasUpper ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                          {p.hasUpper ? '✓' : '○'} At least 1 capital letter (A–Z)
+                        </div>
+                        <div style={{ color: p.hasLower ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                          {p.hasLower ? '✓' : '○'} At least 1 small letter (a–z)
+                        </div>
+                        <div style={{ color: p.hasSpecial ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                          {p.hasSpecial ? '✓' : '○'} At least 1 special character (!@#$%^&*...)
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        Must be at least 10 characters and contain at least 1 capital letter, 1 small letter, and 1 special character.
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1821,10 +1854,48 @@ export default function App() {
                 type="submit" 
                 className="primary-btn" 
                 disabled={authLoading}
-                style={{ width: '100%', padding: '10px', marginTop: '6px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', fontWeight: 600 }}
               >
-                {authLoading ? 'Authenticating...' : authTab === 'login' ? 'Login' : authTab === 'signup' ? 'Create Account' : 'Reset Password'}
+                {authLoading ? 'Authenticating...' : authTab === 'login' ? 'Login / Enter' : authTab === 'signup' ? 'Create Account' : 'Reset Password'}
               </button>
+
+              {/* Intuitive switch helper */}
+              <div style={{ textAlign: 'center', fontSize: '12px', marginTop: '4px', color: 'var(--text-secondary)' }}>
+                {authTab === 'login' ? (
+                  <span>
+                    New to SpendTrace?{' '}
+                    <button 
+                      type="button" 
+                      onClick={() => { setAuthTab('signup'); setAuthError(''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Create Account
+                    </button>
+                  </span>
+                ) : authTab === 'signup' ? (
+                  <span>
+                    Already have an account?{' '}
+                    <button 
+                      type="button" 
+                      onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Login / Enter
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    Remembered password?{' '}
+                    <button 
+                      type="button" 
+                      onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Login / Enter
+                    </button>
+                  </span>
+                )}
+              </div>
             </form>
           </div>
         </div>
