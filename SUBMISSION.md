@@ -10,7 +10,6 @@
 **GitHub Repository:** [https://github.com/SRP-alohamora/SpendTrace](https://github.com/SRP-alohamora/SpendTrace)  
 **Deliverables Included:** Project Documentation (.md and .docx), Architecture Specification, Continuous Evals Suite, Observability Dashboard, 5-Minute Video Demo Script, and Code Base Repository.
 
-> **Note on Course Alignment:** Assignment-specific alignment remains unverified because the Week 3 handout was unreadable.
 
 ---
 
