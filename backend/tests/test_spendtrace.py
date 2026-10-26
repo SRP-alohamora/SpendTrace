@@ -148,3 +148,63 @@ def test_pdf_receipt_ingestion_and_formats():
     assert len(contract.line_items) > 0
     assert "PDF" in contract.line_items[0].name or "AppleCare" in contract.line_items[0].name
 
+def test_password_policy_and_reset():
+    from backend.auth.supabase_auth import (
+        validate_password_strength, register_user, reset_user_password, login_user
+    )
+    import uuid
+    from fastapi import HTTPException
+
+    # Test password complexity rules: >= 10 chars, >= 1 uppercase, >= 1 lowercase, >= 1 special
+    with pytest.raises(HTTPException) as exc:
+        validate_password_strength("Short1!")
+    assert "at least 10 characters" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        validate_password_strength("alllowercase123!")
+    assert "capital letter" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        validate_password_strength("ALLUPPERCASE123!")
+    assert "lowercase letter" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        validate_password_strength("NoSpecialChar123")
+    assert "special character" in exc.value.detail
+
+    # Valid password passes
+    validate_password_strength("ValidP@ssword123")
+
+    # Register with username
+    username = f"user_{uuid.uuid4().hex[:6]}"
+    reg = register_user(email=username, password="InitialP@ssword1")
+    assert reg["user"]["role"] == "member"
+
+    # Reset password
+    reset_res = reset_user_password(identifier=username, new_password="NewSecureP@ssword2")
+    assert reset_res["status"] == "ok"
+
+    # Verify login with new password
+    login_res = login_user(email=username, password="NewSecureP@ssword2")
+    assert "access_token" in login_res
+
+def test_demo_admin_master_ledger_csv():
+    import os
+    import csv
+
+    # Verify the simulated master ledger CSV files exist
+    paths = [
+        "data/spendtrace_demo_admin_master_ledger.csv",
+        "frontend/public/spendtrace_demo_admin_master_ledger.csv"
+    ]
+    for p in paths:
+        assert os.path.exists(p), f"Ledger CSV file missing: {p}"
+        with open(p, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            assert len(rows) >= 10, f"Expected at least 10 benchmark rows in {p}, got {len(rows)}"
+            # Verify columns (case-insensitive)
+            headers_lower = {h.lower() for h in (reader.fieldnames or [])}
+            expected_headers = {"id", "date", "merchant", "amount", "category", "status"}
+            assert expected_headers.issubset(headers_lower)
+

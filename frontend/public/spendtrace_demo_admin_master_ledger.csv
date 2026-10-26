@@ -1,0 +1,12 @@
+ID,Date,Merchant,Amount,Category,Status,Source,HasReceipt,IsReturn
+7c0b08c9-09bc-43e4-9db6-483633c26e34,2026-10-13,Nobu,145.00,Dining,verified,credit_statement,true,false
+623a172b-9175-4f84-8960-a1c7091e6319,2026-10-17,Osteria,68.50,Dining,verified,credit_statement,true,false
+fa06006a-eed0-4a5f-a8ba-759258aa5069,2026-10-20,Blue Ribbon,48.00,Dining,verified,receipt_ocr,true,false
+b11c29e1-2287-43c1-b072-00457635c021,2026-10-24,Trader Joe's,42.18,Groceries,verified,receipt_ocr,true,false
+d982b610-8912-4011-aa90-b18401827419,2026-10-22,Target,26.65,Home,verified,receipt_ocr,true,false
+e0725fdf-6be6-4fdb-938b-aa6cc9cd1cce,2026-10-11,Zara,-89.00,Shopping,reconciled,return_slip,true,true
+4a1f3392-1209-42b7-8911-c91823901923,2026-10-19,Apple Store,149.00,Electronics,verified,receipt_ocr,true,false
+aa112233-4455-6677-8899-aabbccddeeff,2026-10-24,Joe's Diner,18.50,Dining,pending_clarification,bank_export,false,false
+aa112233-4455-6677-8899-aabbccddeef0,2026-10-24,Joe's Diner,18.50,Dining,pending_clarification,bank_export,false,false
+cc223344-5566-7788-9900-bbccddeeff00,2026-10-21,Shell,45.20,Transport,verified,bank_export,false,false
+dd334455-6677-8899-0011-ccddeeff0011,2026-10-15,Whole Foods,82.40,Groceries,verified,bank_export,false,false

@@ -80,6 +80,36 @@ def decode_supabase_jwt(token: str) -> Dict[str, Any]:
 # Database User Operations (Unified PostgreSQL & SQLite support)
 # =====================================================================
 
+def validate_password_strength(password: str) -> None:
+    """
+    Validates password complexity:
+    - Minimum 10 characters
+    - At least 1 capital letter (uppercase)
+    - At least 1 small letter (lowercase)
+    - At least 1 special character
+    """
+    if len(password) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 10 characters long."
+        )
+    if not any(c.isupper() for c in password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include at least 1 capital letter (A-Z)."
+        )
+    if not any(c.islower() for c in password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include at least 1 lowercase letter (a-z)."
+        )
+    special_chars = set("!@#$%^&*()_+-=[]{};':\"|,.<>/?`~\\")
+    if not any(c in special_chars for c in password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include at least 1 special character (e.g. !@#$%^&*)."
+        )
+
 def get_auth_connection():
     from backend.db.database import get_db_connection
     return get_db_connection()
@@ -87,34 +117,37 @@ def get_auth_connection():
 def register_user(email: str, password: str, role: str = "member", full_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Registers a new user in the database.
-    CRITICAL INVARIANT: For a new user, ALWAYS START CLEAN.
+    Validates password strength (min 10 chars, 1 uppercase, 1 lowercase, 1 special char).
     New users are provisioned with 0 transactions, 0 receipts, and 0 refund items.
     """
-    email = email.strip().lower()
+    validate_password_strength(password)
+    raw_identifier = email.strip().lower()
+    email_clean = raw_identifier if "@" in raw_identifier else f"{raw_identifier}@spendtrace.ai"
+    
     conn = get_auth_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cursor.execute("SELECT id FROM users WHERE email = ? OR email LIKE ?", (email_clean, f"{raw_identifier}@%"))
         existing = cursor.fetchone()
         if existing:
-            raise HTTPException(status_code=400, detail="User with this email already exists.")
+            raise HTTPException(status_code=400, detail="User with this email/username already exists.")
 
         user_id = str(uuid.uuid4())
         pwd_hash = hash_password(password)
-        name = full_name or email.split("@")[0].capitalize()
+        name = full_name or raw_identifier.split("@")[0].capitalize()
 
         cursor.execute(
             """INSERT INTO users (id, email, password_hash, role, full_name, created_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (user_id, email, pwd_hash, role, name, datetime.utcnow().isoformat())
+            (user_id, email_clean, pwd_hash, role, name, datetime.utcnow().isoformat())
         )
         conn.commit()
 
-        token = create_supabase_jwt(user_id=user_id, email=email, role=role, full_name=name)
+        token = create_supabase_jwt(user_id=user_id, email=email_clean, role=role, full_name=name)
         return {
             "user": {
                 "id": user_id,
-                "email": email,
+                "email": email_clean,
                 "role": role,
                 "full_name": name,
                 "is_clean_slate": True
@@ -126,19 +159,22 @@ def register_user(email: str, password: str, role: str = "member", full_name: Op
         conn.close()
 
 def login_user(email: str, password: str) -> Dict[str, Any]:
-    """Authenticates an existing user and returns a Supabase JWT."""
-    email = email.strip().lower()
+    """Authenticates an existing user by email or username and returns a Supabase JWT."""
+    raw_identifier = email.strip().lower()
     conn = get_auth_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, email, password_hash, role, full_name FROM users WHERE email = ?", (email,))
+        cursor.execute(
+            "SELECT id, email, password_hash, role, full_name FROM users WHERE email = ? OR email LIKE ? OR email = ?",
+            (raw_identifier, f"{raw_identifier}@%", f"{raw_identifier}@spendtrace.ai")
+        )
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=401, detail="Invalid email or password.")
+            raise HTTPException(status_code=401, detail="Invalid email/username or password.")
 
         user_dict = dict(row)
         if not verify_password(password, user_dict["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid email or password.")
+            raise HTTPException(status_code=401, detail="Invalid email/username or password.")
 
         token = create_supabase_jwt(
             user_id=user_dict["id"],
@@ -146,9 +182,56 @@ def login_user(email: str, password: str) -> Dict[str, Any]:
             role=user_dict["role"],
             full_name=user_dict.get("full_name")
         )
+        cursor.execute("SELECT COUNT(*) as cnt FROM transactions WHERE user_id = ?", (user_dict["id"],))
+        cnt_row = cursor.fetchone()
+        is_clean = (cnt_row["cnt"] == 0) if cnt_row else False
+
         return {
             "user": {
                 "id": user_dict["id"],
+                "email": user_dict["email"],
+                "role": user_dict["role"],
+                "full_name": user_dict.get("full_name"),
+                "is_clean_slate": is_clean
+            },
+            "access_token": token,
+            "token_type": "bearer"
+        }
+    finally:
+        conn.close()
+
+def reset_user_password(identifier: str, new_password: str) -> Dict[str, Any]:
+    """Resets password for an existing user after validating password complexity."""
+    validate_password_strength(new_password)
+    raw_identifier = identifier.strip().lower()
+    conn = get_auth_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, email, role, full_name FROM users WHERE email = ? OR email LIKE ? OR email = ?",
+            (raw_identifier, f"{raw_identifier}@%", f"{raw_identifier}@spendtrace.ai")
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"No account found for '{identifier}'.")
+
+        user_dict = dict(row)
+        user_id = user_dict["id"]
+        pwd_hash = hash_password(new_password)
+        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pwd_hash, user_id))
+        conn.commit()
+
+        token = create_supabase_jwt(
+            user_id=user_id,
+            email=user_dict["email"],
+            role=user_dict["role"],
+            full_name=user_dict.get("full_name")
+        )
+        return {
+            "status": "ok",
+            "message": "Password successfully reset. You are now logged in.",
+            "user": {
+                "id": user_id,
                 "email": user_dict["email"],
                 "role": user_dict["role"],
                 "full_name": user_dict.get("full_name")

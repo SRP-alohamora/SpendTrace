@@ -84,6 +84,7 @@ def get_auth_config():
     }
 
 @app.post("/api/v1/auth/signup")
+@app.post("/api/v1/auth/register")
 def auth_signup(payload: Dict[str, Any]):
     """
     Registers a new user account.
@@ -106,6 +107,16 @@ def auth_login(payload: Dict[str, Any]):
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
     return login_user(email=email, password=password)
+
+@app.post("/api/v1/auth/reset-password")
+def auth_reset_password(payload: Dict[str, Any]):
+    """Resets password for user after verifying password policy."""
+    identifier = (payload.get("email") or payload.get("identifier") or payload.get("username") or "").strip()
+    new_password = (payload.get("new_password") or payload.get("password") or "").strip()
+    if not identifier or not new_password:
+        raise HTTPException(status_code=400, detail="Username/email and new password are required.")
+    from backend.auth.supabase_auth import reset_user_password
+    return reset_user_password(identifier=identifier, new_password=new_password)
 
 @app.get("/api/v1/auth/me")
 def auth_me(current_user: Dict[str, Any] = Depends(get_current_user)):
@@ -340,6 +351,8 @@ def list_clarifications(current_user: Dict[str, Any] = Depends(get_current_user)
 @app.get("/api/v1/export")
 def export_csv(current_user: Dict[str, Any] = Depends(get_current_user)):
     txs = get_ledger_transactions(user_id=current_user["id"], limit=1000)
+    if not txs and (current_user.get("role") == "admin" or current_user.get("id") == "demo_admin_uuid"):
+        txs = get_ledger_transactions(user_id="default_user", limit=1000)
     output = StringIO()
     import csv
     writer = csv.writer(output)
@@ -347,10 +360,11 @@ def export_csv(current_user: Dict[str, Any] = Depends(get_current_user)):
     for t in txs:
         writer.writerow([t["id"], t["date"], t["merchant_clean"], t["amount"], t["category"], t["status"], t["source"]])
     
+    filename_user = current_user.get("email", "admin").split("@")[0]
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=spendtrace_ledger_{current_user['email'].split('@')[0]}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=spendtrace_master_ledger_{filename_user}.csv"}
     )
 
 @app.get("/api/v1/download/submission.docx")

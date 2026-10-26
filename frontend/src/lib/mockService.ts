@@ -403,3 +403,231 @@ export function handleMockChatResponse(message: string): any {
     analytics: null
   };
 }
+
+// Password Complexity & Policy Guidance Checker
+// Minimum 10 characters, at least 1 uppercase, at least 1 lowercase, at least 1 special character
+export function validatePasswordStrength(password: string): {
+  valid: boolean;
+  errors: string[];
+  hasMinLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasSpecial: boolean;
+} {
+  const hasMinLength = password.length >= 10;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password);
+  
+  const errors: string[] = [];
+  if (!hasMinLength) errors.push("Minimum 10 characters required.");
+  if (!hasUpper) errors.push("At least 1 capital letter (A-Z) required.");
+  if (!hasLower) errors.push("At least 1 lowercase letter (a-z) required.");
+  if (!hasSpecial) errors.push("At least 1 special character (!@#$%^&*) required.");
+
+  return {
+    valid: hasMinLength && hasUpper && hasLower && hasSpecial,
+    errors,
+    hasMinLength,
+    hasUpper,
+    hasLower,
+    hasSpecial
+  };
+}
+
+// Simulated User Account Registry in Browser LocalStorage
+const USERS_STORAGE_KEY = 'spendtrace_simulated_users';
+
+interface StoredUser {
+  id: string;
+  email: string;
+  username: string;
+  password: string;
+  full_name: string;
+  role: 'admin' | 'member';
+}
+
+function getStoredUsers(): Record<string, StoredUser> {
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  
+  // Default accounts
+  const defaults: Record<string, StoredUser> = {
+    "admin@spendtrace.ai": {
+      id: MOCK_ADMIN_USER.id,
+      email: MOCK_ADMIN_USER.email,
+      username: "admin",
+      password: "Adminpassword123!",
+      full_name: MOCK_ADMIN_USER.full_name,
+      role: "admin"
+    },
+    "newuser@spendtrace.ai": {
+      id: MOCK_NEW_USER.id,
+      email: MOCK_NEW_USER.email,
+      username: "newuser",
+      password: "Userpassword123!",
+      full_name: MOCK_NEW_USER.full_name,
+      role: "member"
+    }
+  };
+  return defaults;
+}
+
+function saveStoredUsers(users: Record<string, StoredUser>): void {
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  } catch (e) {}
+}
+
+export function mockRegisterUser(identifier: string, password: string, fullName?: string): { user: any; access_token: string } {
+  const validation = validatePasswordStrength(password);
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(' '));
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  const email = clean.includes('@') ? clean : `${clean}@spendtrace.ai`;
+  const username = clean.replace(/@.*$/, '');
+  const users = getStoredUsers();
+
+  // Check if exists
+  if (users[email] || users[clean]) {
+    throw new Error(`An account with username/email '${identifier}' already exists. Please sign in or reset your password.`);
+  }
+
+  const newUser: StoredUser = {
+    id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    email: email,
+    username: username,
+    password: password,
+    full_name: fullName || username.charAt(0).toUpperCase() + username.slice(1),
+    role: "member"
+  };
+
+  users[email] = newUser;
+  users[username] = newUser;
+  saveStoredUsers(users);
+
+  const token = `mock_jwt_${newUser.id}_${Date.now()}`;
+  return {
+    user: {
+      id: newUser.id,
+      email: newUser.email,
+      role: newUser.role,
+      full_name: newUser.full_name
+    },
+    access_token: token
+  };
+}
+
+export function mockLoginUser(identifier: string, password: string): { user: any; access_token: string } {
+  const clean = identifier.trim().toLowerCase();
+  const email = clean.includes('@') ? clean : `${clean}@spendtrace.ai`;
+  const username = clean.replace(/@.*$/, '');
+  const users = getStoredUsers();
+
+  const found = users[clean] || users[email] || users[username];
+  if (!found) {
+    // If logging in with demo shortcuts
+    if (clean === 'admin' || clean === 'admin@spendtrace.ai') {
+      return {
+        user: MOCK_ADMIN_USER,
+        access_token: 'mock_admin_jwt_token'
+      };
+    }
+    if (clean === 'newuser' || clean === 'newuser@spendtrace.ai') {
+      return {
+        user: MOCK_NEW_USER,
+        access_token: 'mock_member_jwt_token'
+      };
+    }
+    throw new Error(`Account '${identifier}' not found. Please click 'Create Account' first or verify spelling.`);
+  }
+
+  // Verify password (allowing default demo passwords if using defaults)
+  const isMatch = found.password === password || 
+                  (clean.includes('admin') && password.toLowerCase().includes('admin')) ||
+                  (clean.includes('newuser') && password.toLowerCase().includes('user'));
+                  
+  if (!isMatch) {
+    throw new Error("Incorrect password. Click 'Reset Password' below if you've forgotten it.");
+  }
+
+  const token = `mock_jwt_${found.id}_${Date.now()}`;
+  return {
+    user: {
+      id: found.id,
+      email: found.email,
+      role: found.role,
+      full_name: found.full_name
+    },
+    access_token: token
+  };
+}
+
+export function mockResetPassword(identifier: string, newPassword: string): { message: string; user: any; access_token: string } {
+  const validation = validatePasswordStrength(newPassword);
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(' '));
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  const email = clean.includes('@') ? clean : `${clean}@spendtrace.ai`;
+  const username = clean.replace(/@.*$/, '');
+  const users = getStoredUsers();
+
+  const found = users[clean] || users[email] || users[username];
+  if (!found) {
+    throw new Error(`No account found matching '${identifier}'. Please create an account.`);
+  }
+
+  found.password = newPassword;
+  users[email] = found;
+  users[username] = found;
+  saveStoredUsers(users);
+
+  const token = `mock_jwt_${found.id}_${Date.now()}`;
+  return {
+    message: "Password successfully updated! You are now logged in.",
+    user: {
+      id: found.id,
+      email: found.email,
+      role: found.role,
+      full_name: found.full_name
+    },
+    access_token: token
+  };
+}
+
+// Client-side CSV Master Ledger generation & download for Demo Admin & users
+export function generateMasterLedgerCsv(transactions: any[]): string {
+  const headers = ["ID", "Date", "Merchant", "Amount", "Category", "Status", "Source", "HasReceipt", "IsReturn"];
+  const rows = transactions.map(t => [
+    t.id || "",
+    t.date || "",
+    `"${(t.merchant_clean || t.merchant_raw || "").replace(/"/g, '""')}"`,
+    typeof t.amount === 'number' ? t.amount.toFixed(2) : (t.amount || "0.00"),
+    `"${(t.category || "General").replace(/"/g, '""')}"`,
+    t.status || "verified",
+    t.source || "manual",
+    t.has_receipt ? "true" : "false",
+    t.is_return ? "true" : "false"
+  ]);
+
+  return [headers.join(","), ...rows.map(r => r.join(","))].join("\r\n");
+}
+
+export function downloadCsvLocally(filename: string, csvContent: string): void {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

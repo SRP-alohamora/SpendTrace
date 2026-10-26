@@ -28,7 +28,13 @@ import {
   MOCK_EVAL_DATA, 
   MOCK_TRACES, 
   MOCK_OBS_METRICS, 
-  handleMockChatResponse 
+  handleMockChatResponse,
+  validatePasswordStrength,
+  mockRegisterUser,
+  mockLoginUser,
+  mockResetPassword,
+  generateMasterLedgerCsv,
+  downloadCsvLocally
 } from './lib/mockService';
 
 const API_BASE = '/api/v1';
@@ -52,11 +58,13 @@ export default function App() {
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('spendtrace_token') || '');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authTab, setAuthTab] = useState<'login' | 'signup'>('login');
+  const [authTab, setAuthTab] = useState<'login' | 'signup' | 'reset'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authFullName, setAuthFullName] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authSuccessMessage, setAuthSuccessMessage] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
   // Chat & Ingestion State
@@ -339,15 +347,45 @@ export default function App() {
     setShowUserDropdown(false);
   };
 
-  // Auth modal submit handler
+  // Client-side simulated CSV master ledger export for Demo Admin and users
+  const handleExportCsv = () => {
+    const txsToExport = transactions.length > 0 ? transactions : MOCK_BENCHMARK_TRANSACTIONS;
+    const csvContent = generateMasterLedgerCsv(txsToExport);
+    const filename = `spendtrace_master_ledger_${currentUser?.role === 'admin' ? 'demo_admin' : (currentUser?.email?.split('@')[0] || 'account')}.csv`;
+    downloadCsvLocally(filename, csvContent);
+  };
+
+  // Auth modal submit handler with password policy validation and resilient offline simulation
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    setAuthSuccessMessage('');
     setAuthLoading(true);
-    const endpoint = authTab === 'signup' ? `${API_BASE}/auth/signup` : `${API_BASE}/auth/login`;
+
+    // Password validation for signup and reset
+    if (authTab === 'signup' || authTab === 'reset') {
+      if (authTab === 'reset' && authPassword !== authConfirmPassword) {
+        setAuthError("Passwords do not match. Please re-enter.");
+        setAuthLoading(false);
+        return;
+      }
+      const validation = validatePasswordStrength(authPassword);
+      if (!validation.valid) {
+        setAuthError("Password policy: " + validation.errors.join(" "));
+        setAuthLoading(false);
+        return;
+      }
+    }
+
+    const endpoint = authTab === 'signup' 
+      ? `${API_BASE}/auth/signup` 
+      : authTab === 'reset'
+        ? `${API_BASE}/auth/reset-password`
+        : `${API_BASE}/auth/login`;
+
     const payload = authTab === 'signup' 
       ? { email: authEmail, password: authPassword, full_name: authFullName, role: 'member' }
-      : { email: authEmail, password: authPassword };
+      : { email: authEmail, password: authPassword, new_password: authPassword };
 
     try {
       const res = await fetch(endpoint, {
@@ -355,23 +393,83 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || 'Authentication failed');
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Authentication failed');
+        }
+        if (data.user) {
+          setCurrentUser(data.user);
+        }
+        if (data.access_token) {
+          setAuthToken(data.access_token);
+        }
+        if (authTab === 'reset') {
+          setAuthSuccessMessage("Password successfully reset! You are now logged in.");
+          setTimeout(() => {
+            setShowAuthModal(false);
+            setAuthEmail('');
+            setAuthPassword('');
+            setAuthConfirmPassword('');
+            setAuthSuccessMessage('');
+          }, 1200);
+        } else {
+          setShowAuthModal(false);
+          setAuthEmail('');
+          setAuthPassword('');
+          setAuthFullName('');
+          if (authTab === 'signup') {
+            setTransactions([]);
+            setRefunds([]);
+            setActiveTab('assistant');
+          }
+        }
+        return;
       }
-      setCurrentUser(data.user);
-      setAuthToken(data.access_token);
-      setShowAuthModal(false);
-      setAuthEmail('');
-      setAuthPassword('');
-      setAuthFullName('');
-      if (authTab === 'signup') {
-        setTransactions([]);
-        setRefunds([]);
-        setActiveTab('assistant');
-      }
+      // If response was not JSON (e.g. 404 HTML on static GitHub Pages)
+      throw new Error("OfflineFallbackTrigger");
     } catch (err: any) {
-      setAuthError(err.message || 'Authentication error');
+      if (err.message !== "OfflineFallbackTrigger" && !err.message.includes("Unexpected token") && !err.message.includes("Failed to fetch")) {
+        setAuthError(err.message || 'Authentication error');
+        return;
+      }
+      // Resilient browser user registry simulation (zero 'Unexpected token' errors on GitHub Pages)
+      try {
+        if (authTab === 'login') {
+          const result = mockLoginUser(authEmail, authPassword);
+          setCurrentUser(result.user);
+          setAuthToken(result.access_token);
+          setShowAuthModal(false);
+          setAuthEmail('');
+          setAuthPassword('');
+        } else if (authTab === 'signup') {
+          const result = mockRegisterUser(authEmail, authPassword, authFullName);
+          setCurrentUser(result.user);
+          setAuthToken(result.access_token);
+          setShowAuthModal(false);
+          setAuthEmail('');
+          setAuthPassword('');
+          setAuthFullName('');
+          setTransactions([]);
+          setRefunds([]);
+          setActiveTab('assistant');
+        } else if (authTab === 'reset') {
+          const result = mockResetPassword(authEmail, authPassword);
+          setCurrentUser(result.user);
+          setAuthToken(result.access_token);
+          setAuthSuccessMessage("Password successfully reset! You are now logged in.");
+          setTimeout(() => {
+            setShowAuthModal(false);
+            setAuthEmail('');
+            setAuthPassword('');
+            setAuthConfirmPassword('');
+            setAuthSuccessMessage('');
+          }, 1200);
+        }
+      } catch (mockErr: any) {
+        setAuthError(mockErr.message || 'Authentication error');
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -735,7 +833,7 @@ export default function App() {
           ) : (
             <button 
               className="primary-btn signin-nav-btn"
-              onClick={() => setShowAuthModal(true)}
+              onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
               title="Sign In to SpendTrace"
             >
               <Key size={14} />
@@ -830,7 +928,7 @@ export default function App() {
                     <LogOut size={14} color="var(--google-red, #d93025)" />
                   </div>
                 ) : (
-                  <div className="user-menu-item" onClick={() => { setShowUserDropdown(false); setShowAuthModal(true); }}>
+                  <div className="user-menu-item" onClick={() => { setShowUserDropdown(false); setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}>
                     <span>Sign In / Sign Up</span>
                     <Key size={14} />
                   </div>
@@ -964,9 +1062,13 @@ export default function App() {
                   <a href="./submission.docx" className="export-btn" download="submission.docx" title="Download Official Project Submission Document (.docx)">
                     <FileText size={14} /> submission.docx
                   </a>
-                  <a href={`${API_BASE}/export`} className="export-btn" download>
+                  <button 
+                    className="export-btn" 
+                    onClick={handleExportCsv}
+                    title="Export simulated CSV master ledger and save to your computer"
+                  >
                     <Download size={14} /> Export CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -1569,7 +1671,7 @@ export default function App() {
                   borderBottom: authTab === 'login' ? '2px solid var(--google-blue)' : '2px solid transparent',
                   color: authTab === 'login' ? 'var(--google-blue)' : 'var(--text-secondary)'
                 }}
-                onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); }}
               >
                 Sign In
               </button>
@@ -1584,15 +1686,37 @@ export default function App() {
                   borderBottom: authTab === 'signup' ? '2px solid var(--google-blue)' : '2px solid transparent',
                   color: authTab === 'signup' ? 'var(--google-blue)' : 'var(--text-secondary)'
                 }}
-                onClick={() => { setAuthTab('signup'); setAuthError(''); }}
+                onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); }}
               >
-                Sign Up
+                Create Account
+              </button>
+              <button 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  padding: '8px 0', 
+                  fontSize: '14px', 
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  borderBottom: authTab === 'reset' ? '2px solid var(--google-blue)' : '2px solid transparent',
+                  color: authTab === 'reset' ? 'var(--google-blue)' : 'var(--text-secondary)'
+                }}
+                onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
+              >
+                Reset Password
               </button>
             </div>
 
             {authError && (
               <div style={{ padding: '8px 12px', background: '#fce8e6', color: 'var(--google-red)', borderRadius: '6px', fontSize: '12px' }}>
                 {authError}
+              </div>
+            )}
+
+            {authSuccessMessage && (
+              <div style={{ padding: '8px 12px', background: '#e6f4ea', color: 'var(--google-green)', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle2 size={16} />
+                <span>{authSuccessMessage}</span>
               </div>
             )}
 
@@ -1611,18 +1735,22 @@ export default function App() {
                 </div>
               )}
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Email Address</label>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  {authTab === 'reset' ? 'Account Email or Username' : 'Email or Username'}
+                </label>
                 <input 
-                  type="email" 
+                  type="text" 
                   required 
-                  placeholder="user@example.com" 
+                  placeholder="e.g. shivani or user@spendtrace.ai" 
                   value={authEmail}
                   onChange={e => setAuthEmail(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Password</label>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  {authTab === 'reset' ? 'New Password' : 'Password'}
+                </label>
                 <input 
                   type="password" 
                   required 
@@ -1632,6 +1760,56 @@ export default function App() {
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
                 />
               </div>
+
+              {/* Password Guidance & Real-time Policy Checklist */}
+              {(authTab === 'signup' || authTab === 'reset') && (() => {
+                const p = validatePasswordStrength(authPassword);
+                return (
+                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px 12px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>
+                      Password Policy (Required):
+                    </div>
+                    <div style={{ color: p.hasMinLength ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                      {p.hasMinLength ? '✓' : '○'} Minimum 10 digits / characters
+                    </div>
+                    <div style={{ color: p.hasUpper ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                      {p.hasUpper ? '✓' : '○'} At least 1 capital letter (A–Z)
+                    </div>
+                    <div style={{ color: p.hasLower ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                      {p.hasLower ? '✓' : '○'} At least 1 small letter (a–z)
+                    </div>
+                    <div style={{ color: p.hasSpecial ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                      {p.hasSpecial ? '✓' : '○'} At least 1 special character (!@#$%^&*...)
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {authTab === 'reset' && (
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Confirm New Password</label>
+                  <input 
+                    type="password" 
+                    required 
+                    placeholder="Re-enter new password" 
+                    value={authConfirmPassword}
+                    onChange={e => setAuthConfirmPassword(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                  />
+                </div>
+              )}
+
+              {authTab === 'login' && (
+                <div style={{ textAlign: 'right', marginTop: '-4px' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
+                    style={{ background: 'none', border: 'none', color: 'var(--google-blue)', fontSize: '12px', cursor: 'pointer', padding: 0 }}
+                  >
+                    Forgot or reset password?
+                  </button>
+                </div>
+              )}
 
               {authTab === 'signup' && (
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '6px' }}>
@@ -1645,7 +1823,7 @@ export default function App() {
                 disabled={authLoading}
                 style={{ width: '100%', padding: '10px', marginTop: '6px' }}
               >
-                {authLoading ? 'Authenticating...' : authTab === 'signup' ? 'Create Account' : 'Sign In'}
+                {authLoading ? 'Authenticating...' : authTab === 'login' ? 'Login' : authTab === 'signup' ? 'Create Account' : 'Reset Password'}
               </button>
             </form>
           </div>
