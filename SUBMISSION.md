@@ -5,6 +5,8 @@
 **Track:** Track 2 — Code-Heavy with LangChain + LangGraph (Python)  
 **Submission Date:** October 25, 2026  
 **Submission Form Link:** [https://forms.gle/waBYFkkf5xxmcouV9](https://forms.gle/waBYFkkf5xxmcouV9)  
+**Live Web Application (GitHub Pages):** [https://srp-alohamora.github.io/SpendTrace/](https://srp-alohamora.github.io/SpendTrace/)  
+**GitHub Repository:** [https://github.com/SRP-alohamora/SpendTrace](https://github.com/SRP-alohamora/SpendTrace)  
 **Deliverables Included:** Project Documentation, Architecture Specification, Continuous Evals Suite, Observability Dashboard, 5-Minute Video Demo Script, and Code Base Repository.
 
 > **Note on Course Alignment:** Assignment-specific alignment remains unverified because the Week 3 handout was unreadable.
