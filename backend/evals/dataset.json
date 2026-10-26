@@ -1,0 +1,95 @@
+[
+  {
+    "id": "eval_ext_01",
+    "name": "Trader Joe's Standard Receipt",
+    "category": "Extraction",
+    "input_type": "receipt_image",
+    "filename": "trader_joes_standard.jpg",
+    "input_content": "trader_joes",
+    "ground_truth": {
+      "merchant_name": "Trader Joe's",
+      "total_amount": 42.18,
+      "subtotal": 38.90,
+      "tax": 3.28,
+      "confidence_threshold": 0.90
+    }
+  },
+  {
+    "id": "eval_ext_02",
+    "name": "Target Household Supplies",
+    "category": "Extraction",
+    "input_type": "receipt_image",
+    "filename": "target_household.jpg",
+    "input_content": "target",
+    "ground_truth": {
+      "merchant_name": "Target",
+      "total_amount": 26.65,
+      "subtotal": 24.50,
+      "tax": 2.15,
+      "confidence_threshold": 0.85
+    }
+  },
+  {
+    "id": "eval_ext_03",
+    "name": "Peet's Coffee Faded Thermal (HITL Trigger)",
+    "category": "Extraction",
+    "input_type": "receipt_image",
+    "filename": "faded_peets_coffee.jpg",
+    "input_content": "faded",
+    "ground_truth": {
+      "merchant_name": "Peet's Coffee",
+      "total_amount": 5.45,
+      "triggers_hitl": true
+    }
+  },
+  {
+    "id": "eval_dedup_01",
+    "name": "Identical Card Swipe Deduplication",
+    "category": "Deduplication",
+    "input_type": "nl_expense",
+    "filename": "duplicate_check",
+    "input_content": "Spent $5.50 at Blue Bottle Coffee today for morning espresso",
+    "ground_truth": {
+      "relationship_type": "duplicate_charge",
+      "requires_human_review": true
+    }
+  },
+  {
+    "id": "eval_refund_01",
+    "name": "Zara Overdue Return Detection",
+    "category": "Refund Radar",
+    "input_type": "nl_query",
+    "filename": "refund_query",
+    "input_content": "Which returns have had no matching refund?",
+    "ground_truth": {
+      "expected_unmatched_count": 1,
+      "contains_merchant": "Zara",
+      "contains_amount": 89.00
+    }
+  },
+  {
+    "id": "eval_sql_01",
+    "name": "Month-Over-Month Spend Spike Analysis",
+    "category": "NL-to-SQL",
+    "input_type": "nl_query",
+    "filename": "spike_query",
+    "input_content": "Why did my spending increase this month?",
+    "ground_truth": {
+      "top_driver_category": "Dining",
+      "enforces_readonly": true,
+      "min_citations": 1
+    }
+  },
+  {
+    "id": "eval_sql_02",
+    "name": "Category Spending Filter",
+    "category": "NL-to-SQL",
+    "input_type": "nl_query",
+    "filename": "category_query",
+    "input_content": "How much did I spend on dining out recently?",
+    "ground_truth": {
+      "enforces_readonly": true,
+      "category": "Dining"
+    }
+  }
+]
