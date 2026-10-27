@@ -906,11 +906,6 @@ export default function App() {
             <span>submission.docx</span>
           </a>
 
-          <span className="status-pill green">
-            <Database size={12} />
-            PostgreSQL • Supabase Auth
-          </span>
-
           {currentUser ? (
             <button 
               className="logout-nav-btn"
@@ -1875,7 +1870,7 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '18px' }}>
                 <Key size={20} color="var(--google-blue)" />
-                <span>Supabase Open Source Auth</span>
+                <span>Account Authentication</span>
               </div>
               <button className="close-btn" onClick={() => setShowAuthModal(false)}>
                 <X size={18} />
