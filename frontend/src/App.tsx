@@ -16,7 +16,11 @@ import {
   CheckCircle2,
   Database,
   Key,
-  LogOut
+  LogOut,
+  Mail,
+  ExternalLink,
+  Copy,
+  Check
 } from 'lucide-react';
 
 import { 
@@ -34,7 +38,9 @@ import {
   mockLoginUser,
   mockResetPassword,
   generateMasterLedgerCsv,
-  downloadCsvLocally
+  downloadCsvLocally,
+  generateCustomizedDisputeDraft,
+  type VendorSupportInfo
 } from './lib/mockService';
 
 const API_BASE = '/api/v1';
@@ -86,6 +92,14 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<any>(null);
+
+  // Dispute Notice Draft State
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [selectedRefundForDispute, setSelectedRefundForDispute] = useState<any>(null);
+  const [disputeSubject, setDisputeSubject] = useState('');
+  const [disputeDraft, setDisputeDraft] = useState('');
+  const [vendorContact, setVendorContact] = useState<VendorSupportInfo | null>(null);
+  const [disputeCopied, setDisputeCopied] = useState(false);
 
   // Evals State
   const [evalData, setEvalData] = useState<any>(null);
@@ -353,6 +367,58 @@ export default function App() {
     const csvContent = generateMasterLedgerCsv(txsToExport);
     const filename = `spendtrace_master_ledger_${currentUser?.role === 'admin' ? 'demo_admin' : (currentUser?.email?.split('@')[0] || 'account')}.csv`;
     downloadCsvLocally(filename, csvContent);
+  };
+
+  // Open Dispute Notice Draft modal with verified vendor contact info
+  const handleOpenDisputeModal = async (refund: any) => {
+    setSelectedRefundForDispute(refund);
+    setDisputeCopied(false);
+    
+    // 1. Generate client-side draft instantly (resilient on GitHub Pages)
+    const clientDraft = generateCustomizedDisputeDraft(
+      refund,
+      currentUser?.full_name || currentUser?.email?.split('@')[0] || 'Shivani',
+      currentUser?.email
+    );
+    setVendorContact(clientDraft.vendor_contact);
+    setDisputeSubject(clientDraft.subject);
+    setDisputeDraft(clientDraft.body);
+    setShowDisputeModal(true);
+
+    // 2. Proactively try backend API if active
+    try {
+      const res = await fetch(`${API_BASE}/refunds/dispute-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          merchant_name: refund.merchant_name,
+          amount: refund.expected_amount,
+          return_date: refund.return_date,
+          deadline_date: refund.deadline_date,
+          item_description: refund.item_description,
+          notes: refund.notes
+        })
+      });
+      if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.subject) setDisputeSubject(data.subject);
+          if (data.body) setDisputeDraft(data.body);
+          if (data.vendor_contact) setVendorContact(data.vendor_contact);
+        }
+      }
+    } catch (e) {
+      // Offline fallback already active
+    }
+  };
+
+  // Copy dispute notice to clipboard
+  const handleCopyDisputeNotice = () => {
+    const fullText = `Subject: ${disputeSubject}\n\n${disputeDraft}`;
+    navigator.clipboard.writeText(fullText);
+    setDisputeCopied(true);
+    setTimeout(() => setDisputeCopied(false), 2500);
   };
 
   // Auth modal submit handler with password policy validation and resilient offline simulation
@@ -1300,8 +1366,10 @@ export default function App() {
                       </p>
                       <button 
                         className="dispute-btn"
-                        onClick={() => handleSendMessage(`Draft a dispute email to ${r.merchant_name} for an uncredited $${r.expected_amount} return from ${r.return_date}`)}
+                        onClick={() => handleOpenDisputeModal(r)}
+                        title="Open customized dispute notice draft with verified vendor support contacts"
                       >
+                        <Mail size={13} style={{ marginRight: 6 }} />
                         Draft Dispute Notice
                       </button>
                     </div>
@@ -1663,6 +1731,137 @@ export default function App() {
             <div className="modal-footer">
               <button className="primary-btn" onClick={() => setSelectedTx(null)}>
                 Close Audit Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dispute Notice Draft Modal with Verified Vendor Support & Source Link */}
+      {showDisputeModal && selectedRefundForDispute && vendorContact && (
+        <div className="auth-modal-backdrop" onClick={() => setShowDisputeModal(false)}>
+          <div className="dispute-modal-card" onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <FileText size={22} color="var(--google-blue)" />
+                <div>
+                  <h3 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
+                    Dispute Notice Draft — {vendorContact.canonical_name}
+                  </h3>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Overdue Return • ${Math.abs(Number(selectedRefundForDispute.expected_amount || 0)).toFixed(2)} USD • Return Date: {selectedRefundForDispute.return_date}
+                  </div>
+                </div>
+              </div>
+              <button className="close-btn" onClick={() => setShowDisputeModal(false)} title="Close Dispute Window">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Vendor Contact Information Card with Validation & Source Hyperlink */}
+            <div className="vendor-contact-card">
+              <div className="vendor-contact-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Recipient Support Email:
+                  </span>
+                  <code style={{ fontSize: 13, background: '#FFFFFF', padding: '3px 8px', borderRadius: 4, border: '1px solid var(--border-color)', color: 'var(--google-blue)', fontWeight: 600 }}>
+                    {vendorContact.support_email}
+                  </code>
+                  <span className="status-pill green" title={vendorContact.email_validation.validation_note}>
+                    <CheckCircle2 size={13} style={{ marginRight: 4 }} />
+                    {vendorContact.email_validation.validation_badge}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap', marginTop: 2 }}>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  Obtained From Official Support Website:
+                </span>
+                <a 
+                  href={vendorContact.support_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="support-website-link"
+                  title="Click to open and verify contact information on the vendor's official support portal"
+                >
+                  <span>{vendorContact.support_url}</span>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
+
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4, marginTop: 2 }}>
+                ✓ <strong>Validated Contact:</strong> {vendorContact.email_validation.validation_note} Source: <em>{vendorContact.source_citation}</em>
+              </div>
+            </div>
+
+            {/* Subject Line */}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
+                Dispute Email Subject Line
+              </label>
+              <input 
+                type="text" 
+                value={disputeSubject} 
+                onChange={e => setDisputeSubject(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-color)', fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* Customized Dispute Draft Text Box */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Sample Customized Dispute Notice (Editable Text Box)
+                </label>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Tailored to return voucher notes, statutory deadline, and chargeback rights
+                </span>
+              </div>
+              <textarea 
+                className="dispute-draft-textarea"
+                rows={11}
+                value={disputeDraft}
+                onChange={e => setDisputeDraft(e.target.value)}
+                placeholder="Dispute notice letter content..."
+              />
+            </div>
+
+            {/* Modal Actions */}
+            <div className="dispute-modal-actions">
+              <button 
+                className="secondary-btn"
+                onClick={() => setShowDisputeModal(false)}
+                style={{ padding: '8px 16px' }}
+              >
+                Close
+              </button>
+
+              <a 
+                href={`mailto:${vendorContact.support_email}?subject=${encodeURIComponent(disputeSubject)}&body=${encodeURIComponent(disputeDraft)}`}
+                className="secondary-btn"
+                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px' }}
+                title="Open system default email client with recipient, subject, and body pre-filled"
+              >
+                <Mail size={14} /> Open in Email App
+              </a>
+
+              <button 
+                className="primary-btn"
+                onClick={handleCopyDisputeNotice}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', fontWeight: 600 }}
+              >
+                {disputeCopied ? (
+                  <>
+                    <Check size={14} /> Copied to Clipboard!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} /> Copy Dispute Notice
+                  </>
+                )}
               </button>
             </div>
           </div>

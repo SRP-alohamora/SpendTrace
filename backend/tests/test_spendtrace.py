@@ -208,3 +208,45 @@ def test_demo_admin_master_ledger_csv():
             expected_headers = {"id", "date", "merchant", "amount", "category", "status"}
             assert expected_headers.issubset(headers_lower)
 
+def test_vendor_support_and_dispute_notice_draft():
+    from backend.agents.vendor_directory import (
+        validate_vendor_email, get_vendor_support_contact, generate_customized_dispute_draft
+    )
+
+    # 1. Test Email Validation
+    val_valid = validate_vendor_email("contact.us@zara.com", "zara.com")
+    assert val_valid["is_valid"] is True
+    assert val_valid["domain_matches_brand"] is True
+
+    val_invalid = validate_vendor_email("invalid-email-format", "zara.com")
+    assert val_invalid["is_valid"] is False
+
+    # 2. Test Vendor Support Contact Retrieval
+    contact = get_vendor_support_contact("Zara")
+    assert contact["merchant_name"] == "Zara"
+    assert contact["support_email"] == "contact.us@zara.com"
+    assert "https://www.zara.com" in contact["support_url"]
+    assert contact["email_validation"]["is_valid"] is True
+
+    # 3. Test Customized Dispute Draft Generation
+    draft = generate_customized_dispute_draft(
+        merchant_name="Zara",
+        amount=89.00,
+        return_date="2026-10-11",
+        deadline_date="2026-10-21",
+        item_description="Structured Wool Blend Oversized Coat (Size M)",
+        notes="Zara jacket returned at Soho store. Tracking voucher verified.",
+        customer_name="Shivani",
+        customer_email="shivani@spendtrace.ai"
+    )
+
+    assert "Zara" in draft["merchant"]
+    assert "$89.00" in draft["subject"]
+    assert "Shivani" in draft["subject"]
+    assert "contact.us@zara.com" in draft["body"]
+    assert "https://www.zara.com" in draft["body"]
+    assert "2026-10-11" in draft["body"]
+    assert "Structured Wool Blend Oversized Coat" in draft["body"]
+    assert "Regulation Z" in draft["body"]
+
+

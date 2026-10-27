@@ -343,6 +343,34 @@ def list_refunds(current_user: Dict[str, Any] = Depends(get_current_user)):
     overdue_count = sum(1 for r in refunds if r["status"] == "overdue_alert")
     return {"refunds": refunds, "overdue_count": overdue_count, "user_id": current_user["id"]}
 
+@app.post("/api/v1/refunds/dispute-draft")
+def get_refund_dispute_draft(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Generates a sample customized dispute draft for an uncredited return,
+    fetching verified contact information and support URL from vendor directory.
+    """
+    from backend.agents.vendor_directory import generate_customized_dispute_draft
+    merchant_name = payload.get("merchant_name", "Vendor")
+    amount = float(payload.get("amount", 0.0) or payload.get("expected_amount", 0.0))
+    return_date = payload.get("return_date", datetime.utcnow().strftime("%Y-%m-%d"))
+    deadline_date = payload.get("deadline_date")
+    item_description = payload.get("item_description")
+    notes = payload.get("notes")
+    customer_name = current_user.get("full_name") or current_user.get("email", "").split("@")[0].capitalize() or "Customer"
+    customer_email = current_user.get("email")
+
+    draft = generate_customized_dispute_draft(
+        merchant_name=merchant_name,
+        amount=amount,
+        return_date=return_date,
+        deadline_date=deadline_date,
+        item_description=item_description,
+        notes=notes,
+        customer_name=customer_name,
+        customer_email=customer_email
+    )
+    return draft
+
 @app.get("/api/v1/clarifications")
 def list_clarifications(current_user: Dict[str, Any] = Depends(get_current_user)):
     queue = get_clarification_queue(user_id=current_user["id"])
