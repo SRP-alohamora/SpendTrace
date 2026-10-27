@@ -893,19 +893,8 @@ export default function App() {
           </button>
         </nav>
 
-        {/* User Profile, IAM Status & Supabase Auth Controls */}
+        {/* User Profile, IAM Status & Controls */}
         <div className="nav-status">
-          <a 
-            href="./submission.docx" 
-            download="submission.docx" 
-            className="export-btn"
-            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px' }}
-            title="Download Official Submission Document (submission.docx)"
-          >
-            <Download size={13} />
-            <span>submission.docx</span>
-          </a>
-
           {currentUser ? (
             <button 
               className="logout-nav-btn"
@@ -1144,9 +1133,6 @@ export default function App() {
                   </p>
                 </div>
                 <div className="ledger-actions">
-                  <a href="./submission.docx" className="export-btn" download="submission.docx" title="Download Official Project Submission Document (.docx)">
-                    <FileText size={14} /> submission.docx
-                  </a>
                   <button 
                     className="export-btn" 
                     onClick={handleExportCsv}
