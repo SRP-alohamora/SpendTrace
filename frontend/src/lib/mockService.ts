@@ -444,7 +444,91 @@ interface StoredUser {
   username: string;
   password: string;
   full_name: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'member' | 'guest';
+  email_verified?: boolean;
+}
+
+export function isMfaExempt(identifier: string, role?: string): boolean {
+  const clean = identifier.trim().toLowerCase();
+  if (role === 'guest' || role === 'admin') return true;
+  if (clean === 'admin' || clean === 'admin@spendtrace.ai' || clean === 'newuser' || clean === 'newuser@spendtrace.ai') return true;
+  if (clean === 'guest' || clean === 'guest@spendtrace.ai' || clean.startsWith('guest_')) return true;
+  return false;
+}
+
+export function mockGenerateMfaCode(email: string): string {
+  const clean = email.trim().toLowerCase();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  try {
+    sessionStorage.setItem(`spendtrace_mfa_${clean}`, code);
+  } catch (e) {}
+  return code;
+}
+
+export function mockVerifyMfaCode(email: string, code: string): { user: any; access_token: string } {
+  const clean = email.trim().toLowerCase();
+  const inputCode = code.trim();
+  let stored: string | null = null;
+  try {
+    stored = sessionStorage.getItem(`spendtrace_mfa_${clean}`);
+  } catch (e) {}
+
+  if (inputCode !== "123456" && stored && inputCode !== stored) {
+    throw new Error("Invalid or expired MFA verification code. Please check your email and try again.");
+  }
+  try {
+    sessionStorage.removeItem(`spendtrace_mfa_${clean}`);
+  } catch (e) {}
+
+  const users = getStoredUsers();
+  const found = users[clean] || Object.values(users).find(u => u.email.toLowerCase() === clean);
+  if (found) {
+    found.email_verified = true;
+    users[clean] = found;
+    users[found.email] = found;
+    saveStoredUsers(users);
+    const token = `mock_jwt_${found.id}_${Date.now()}`;
+    return {
+      user: {
+        id: found.id,
+        email: found.email,
+        role: found.role,
+        full_name: found.full_name,
+        email_verified: true,
+        is_clean_slate: true
+      },
+      access_token: token
+    };
+  }
+
+  const genericId = `usr_${Date.now()}`;
+  return {
+    user: {
+      id: genericId,
+      email: clean,
+      role: "member",
+      full_name: clean.split('@')[0],
+      email_verified: true,
+      is_clean_slate: true
+    },
+    access_token: `mock_jwt_${genericId}`
+  };
+}
+
+export function mockGuestLogin(): { user: any; access_token: string } {
+  const id = `guest_${Math.random().toString(36).substring(2, 9)}`;
+  const email = `${id}@guest.spendtrace.ai`;
+  return {
+    user: {
+      id: id,
+      email: email,
+      role: 'guest',
+      full_name: 'Guest User',
+      email_verified: true,
+      is_clean_slate: true
+    },
+    access_token: `mock_guest_jwt_${id}`
+  };
 }
 
 function getStoredUsers(): Record<string, StoredUser> {
@@ -454,17 +538,19 @@ function getStoredUsers(): Record<string, StoredUser> {
       id: MOCK_ADMIN_USER.id,
       email: MOCK_ADMIN_USER.email,
       username: "admin",
-      password: "Adminpassword123!",
+      password: "",
       full_name: MOCK_ADMIN_USER.full_name,
-      role: "admin"
+      role: "admin",
+      email_verified: true
     },
     "admin": {
       id: MOCK_ADMIN_USER.id,
       email: MOCK_ADMIN_USER.email,
       username: "admin",
-      password: "Adminpassword123!",
+      password: "",
       full_name: MOCK_ADMIN_USER.full_name,
-      role: "admin"
+      role: "admin",
+      email_verified: true
     },
     "newuser@spendtrace.ai": {
       id: MOCK_NEW_USER.id,
@@ -472,7 +558,8 @@ function getStoredUsers(): Record<string, StoredUser> {
       username: "newuser",
       password: "Userpassword123!",
       full_name: MOCK_NEW_USER.full_name,
-      role: "member"
+      role: "member",
+      email_verified: true
     },
     "newuser": {
       id: MOCK_NEW_USER.id,
@@ -480,7 +567,8 @@ function getStoredUsers(): Record<string, StoredUser> {
       username: "newuser",
       password: "Userpassword123!",
       full_name: MOCK_NEW_USER.full_name,
-      role: "member"
+      role: "member",
+      email_verified: true
     },
     "shivani@spendtrace.ai": {
       id: "usr_shivani_001",
@@ -488,7 +576,8 @@ function getStoredUsers(): Record<string, StoredUser> {
       username: "shivani",
       password: "Password123!@#",
       full_name: "Shivani",
-      role: "member"
+      role: "member",
+      email_verified: true
     },
     "shivani": {
       id: "usr_shivani_001",
@@ -496,7 +585,8 @@ function getStoredUsers(): Record<string, StoredUser> {
       username: "shivani",
       password: "Password123!@#",
       full_name: "Shivani",
-      role: "member"
+      role: "member",
+      email_verified: true
     }
   };
 
@@ -517,34 +607,50 @@ function saveStoredUsers(users: Record<string, StoredUser>): void {
   } catch (e) {}
 }
 
-export function mockRegisterUser(identifier: string, password: string, fullName?: string): { user: any; access_token: string } {
+export function mockRegisterUser(identifier: string, password: string, fullName?: string): { user?: any; access_token?: string; mfa_required?: boolean; email?: string; dev_code_hint?: string; message?: string } {
   const validation = validatePasswordStrength(password);
   if (!validation.valid) {
     throw new Error(validation.errors.join(' '));
   }
 
   const clean = identifier.trim().toLowerCase();
+  // Support user's own email account (e.g. user@gmail.com, custom personal email)
   const email = clean.includes('@') ? clean : `${clean}@spendtrace.ai`;
   const username = clean.replace(/@.*$/, '');
   const users = getStoredUsers();
 
-  // If already exists, update password and log in immediately (never lock the user in a loop)
+  const exempt = isMfaExempt(email);
+
+  // If already exists, update credentials
   if (users[email] || users[clean] || users[username]) {
     const existing = users[email] || users[clean] || users[username];
     existing.password = password;
     if (fullName) existing.full_name = fullName;
+    existing.email_verified = exempt ? true : false;
     users[email] = existing;
     users[username] = existing;
     users[clean] = existing;
     saveStoredUsers(users);
 
+    if (!exempt) {
+      const code = mockGenerateMfaCode(email);
+      return {
+        mfa_required: true,
+        email: email,
+        dev_code_hint: code,
+        message: `Mandatory MFA: A 6-digit verification code has been dispatched to ${email}.`
+      };
+    }
+
     const token = `mock_jwt_${existing.id}_${Date.now()}`;
     return {
+      mfa_required: false,
       user: {
         id: existing.id,
         email: existing.email,
         role: existing.role,
-        full_name: existing.full_name
+        full_name: existing.full_name,
+        email_verified: true
       },
       access_token: token
     };
@@ -556,7 +662,8 @@ export function mockRegisterUser(identifier: string, password: string, fullName?
     username: username,
     password: password,
     full_name: fullName || username.charAt(0).toUpperCase() + username.slice(1),
-    role: "member"
+    role: "member",
+    email_verified: exempt ? true : false
   };
 
   users[email] = newUser;
@@ -564,49 +671,69 @@ export function mockRegisterUser(identifier: string, password: string, fullName?
   users[clean] = newUser;
   saveStoredUsers(users);
 
+  if (!exempt) {
+    const code = mockGenerateMfaCode(email);
+    return {
+      mfa_required: true,
+      email: email,
+      dev_code_hint: code,
+      message: `Mandatory MFA: A 6-digit verification code has been dispatched to ${email}.`
+    };
+  }
+
   const token = `mock_jwt_${newUser.id}_${Date.now()}`;
   return {
+    mfa_required: false,
     user: {
       id: newUser.id,
       email: newUser.email,
       role: newUser.role,
-      full_name: newUser.full_name
+      full_name: newUser.full_name,
+      email_verified: true
     },
     access_token: token
   };
 }
 
-export function mockLoginUser(identifier: string, password: string): { user: any; access_token: string } {
+export function mockLoginUser(identifier: string, password: string): { user?: any; access_token?: string; mfa_required?: boolean; email?: string; dev_code_hint?: string; message?: string } {
   const clean = identifier.trim().toLowerCase();
   const email = clean.includes('@') ? clean : `${clean}@spendtrace.ai`;
   const username = clean.replace(/@.*$/, '');
   const users = getStoredUsers();
 
+  // Guest shortcut
+  if (clean === 'guest' || clean === 'guest@spendtrace.ai') {
+    return mockGuestLogin();
+  }
+
+  // Demo shortcut
+  if (clean === 'admin' || clean === 'admin@spendtrace.ai') {
+    return {
+      mfa_required: false,
+      user: MOCK_ADMIN_USER,
+      access_token: 'mock_admin_jwt_token'
+    };
+  }
+  if (clean === 'newuser' || clean === 'newuser@spendtrace.ai') {
+    return {
+      mfa_required: false,
+      user: MOCK_NEW_USER,
+      access_token: 'mock_member_jwt_token'
+    };
+  }
+
   let found = users[clean] || users[email] || users[username];
   
   if (!found) {
-    // If logging in with demo shortcuts
-    if (clean === 'admin' || clean === 'admin@spendtrace.ai') {
-      return {
-        user: MOCK_ADMIN_USER,
-        access_token: 'mock_admin_jwt_token'
-      };
-    }
-    if (clean === 'newuser' || clean === 'newuser@spendtrace.ai') {
-      return {
-        user: MOCK_NEW_USER,
-        access_token: 'mock_member_jwt_token'
-      };
-    }
     if (clean === 'shivani' || clean === 'shivani@spendtrace.ai') {
-      // Auto-provision shivani account with entered password
       const newShivani: StoredUser = {
         id: "usr_shivani_001",
         email: "shivani@spendtrace.ai",
         username: "shivani",
         password: password,
         full_name: "Shivani",
-        role: "member"
+        role: "member",
+        email_verified: true
       };
       users["shivani"] = newShivani;
       users["shivani@spendtrace.ai"] = newShivani;
@@ -617,7 +744,7 @@ export function mockLoginUser(identifier: string, password: string): { user: any
     }
   }
 
-  // Verify password (allowing match or known default overrides)
+  // Verify password
   const isMatch = found.password === password || 
                   (clean.includes('admin') && password.toLowerCase().includes('admin')) ||
                   (clean.includes('newuser') && password.toLowerCase().includes('user')) ||
@@ -627,13 +754,26 @@ export function mockLoginUser(identifier: string, password: string): { user: any
     throw new Error("Incorrect password. Click 'Reset Password' below or enter your registered password.");
   }
 
+  const exempt = isMfaExempt(found.email, found.role);
+  if (!exempt && !found.email_verified) {
+    const code = mockGenerateMfaCode(found.email);
+    return {
+      mfa_required: true,
+      email: found.email,
+      dev_code_hint: code,
+      message: `Mandatory MFA: A 6-digit verification code has been dispatched to ${found.email}.`
+    };
+  }
+
   const token = `mock_jwt_${found.id}_${Date.now()}`;
   return {
+    mfa_required: false,
     user: {
       id: found.id,
       email: found.email,
       role: found.role,
-      full_name: found.full_name
+      full_name: found.full_name,
+      email_verified: Boolean(found.email_verified)
     },
     access_token: token
   };

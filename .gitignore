@@ -49,10 +49,16 @@ dist/
 dist-ssr/
 *.local
 
-# Environment variables
+# Environment variables, Secrets & Passwords
 .env
 .env.*
 !.env.example
+*.secrets.json
+.secrets.json
+backend/.secrets.json
+credentials.json
+backend/credentials.json
+backend/.env
 
 # OS & IDE
 .DS_Store

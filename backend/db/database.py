@@ -127,7 +127,14 @@ def init_db(seed_sample_data: bool = True):
         except Exception as e2:
             print(f"[SpendTrace DB Init] Schema load note: {e2}")
 
-    # Seed Default Users (Admin & Clean New User)
+    # Ensure email_verified column exists
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0;")
+        conn.commit()
+    except Exception:
+        pass
+
+    # Seed Default Users (Admin, Clean New User, Guest)
     seed_users(conn)
 
     # Seed Demo Transactions strictly for DEMO_ADMIN_ID
@@ -137,34 +144,44 @@ def init_db(seed_sample_data: bool = True):
     conn.close()
 
 def seed_users(conn):
-    """Provisions default demo admin and clean member users with hashed passwords."""
+    """Provisions default demo admin, clean member, guest, and test users."""
     from backend.auth.supabase_auth import hash_password
+    from backend.config import get_admin_password
     cur = conn.cursor()
     cur.execute("SELECT id FROM users WHERE id = ?", (DEMO_ADMIN_ID,))
     if not cur.fetchone():
         # 1. Demo Admin (for evals & observability & rich ledger preview)
         cur.execute(
-            """INSERT INTO users (id, email, password_hash, role, full_name, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (DEMO_ADMIN_ID, "admin@spendtrace.ai", hash_password("adminpassword123"), "admin", "Admin User", datetime.utcnow().isoformat())
+            """INSERT INTO users (id, email, password_hash, role, full_name, email_verified, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (DEMO_ADMIN_ID, "admin@spendtrace.ai", hash_password(get_admin_password()), "admin", "Admin User", 1, datetime.utcnow().isoformat())
         )
     
     cur.execute("SELECT id FROM users WHERE id = ?", (DEMO_MEMBER_ID,))
     if not cur.fetchone():
         # 2. Clean New User (Starts with 0 transactions, 0 receipts, 0 refunds)
         cur.execute(
-            """INSERT INTO users (id, email, password_hash, role, full_name, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (DEMO_MEMBER_ID, "newuser@spendtrace.ai", hash_password("userpassword123"), "member", "New User", datetime.utcnow().isoformat())
+            """INSERT INTO users (id, email, password_hash, role, full_name, email_verified, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (DEMO_MEMBER_ID, "newuser@spendtrace.ai", hash_password("userpassword123"), "member", "New User", 1, datetime.utcnow().isoformat())
         )
     
     # 3. Seeded user shivani
     cur.execute("SELECT id FROM users WHERE email = ? OR email LIKE ?", ("shivani@spendtrace.ai", "shivani@%"))
     if not cur.fetchone():
         cur.execute(
-            """INSERT INTO users (id, email, password_hash, role, full_name, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            ("00000000-0000-0000-0000-000000000003", "shivani@spendtrace.ai", hash_password("Password123!@#"), "member", "Shivani", datetime.utcnow().isoformat())
+            """INSERT INTO users (id, email, password_hash, role, full_name, email_verified, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ("00000000-0000-0000-0000-000000000003", "shivani@spendtrace.ai", hash_password("Password123!@#"), "member", "Shivani", 1, datetime.utcnow().isoformat())
+        )
+
+    # 4. Guest User (Exempt from MFA, clean slate)
+    cur.execute("SELECT id FROM users WHERE email = ? OR role = 'guest'", ("guest@spendtrace.ai",))
+    if not cur.fetchone():
+        cur.execute(
+            """INSERT INTO users (id, email, password_hash, role, full_name, email_verified, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ("00000000-0000-0000-0000-000000000004", "guest@spendtrace.ai", hash_password("GuestPass2026!"), "guest", "Guest User", 1, datetime.utcnow().isoformat())
         )
     conn.commit()
 
@@ -175,6 +192,11 @@ def seed_admin_demo_data(conn):
     row = cur.fetchone()
     count = row["count"] if row else 0
     if count > 0:
+        # Keep relative dates fresh so deduplication & refund radar benchmark tests never expire
+        today = date.today()
+        cur.execute("UPDATE transactions SET date = ?, posted_date = ? WHERE user_id = ? AND merchant_clean = 'Blue Bottle Coffee' AND source = 'manual_chat'",
+                    (str(today - timedelta(days=1)), str(today - timedelta(days=1)), DEMO_ADMIN_ID))
+        conn.commit()
         return
 
     # Default accounts for demo admin

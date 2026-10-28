@@ -28,6 +28,11 @@ from backend.auth.supabase_auth import (
     get_current_user,
     require_admin,
     switch_user_role,
+    verify_mfa_and_issue_token,
+    resend_mfa_code,
+    guest_login_user,
+    demo_admin_login_user,
+    is_mfa_exempt,
     SUPABASE_URL,
     SUPABASE_ANON_KEY
 )
@@ -80,7 +85,9 @@ def get_auth_config():
         "supabase_url": SUPABASE_URL,
         "supabase_anon_key": SUPABASE_ANON_KEY,
         "provider": "supabase-opensrc-auth",
-        "iam_roles": ["admin", "member"]
+        "iam_roles": ["admin", "member", "guest"],
+        "mfa_mandatory": True,
+        "mfa_exempt": ["demo_admin", "guest"]
     }
 
 @app.post("/api/v1/auth/signup")
@@ -88,8 +95,8 @@ def get_auth_config():
 def auth_signup(payload: Dict[str, Any]):
     """
     Registers a new user account.
-    CRITICAL REQUIREMENT: For a new user, ALWAYS START CLEAN.
-    New users start with 0 transactions, 0 receipts, and 0 refund items.
+    Supports user's own custom email address (e.g. user@gmail.com).
+    Mandatory MFA is enforced to verify email address, except for demo account and guest user.
     """
     email = payload.get("email", "").strip()
     password = payload.get("password", "").strip()
@@ -97,16 +104,57 @@ def auth_signup(payload: Dict[str, Any]):
     role = payload.get("role", "member")
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
-    return register_user(email=email, password=password, role=role, full_name=full_name)
+    return register_user(email=email, password=password, role=role, full_name=full_name, require_mfa=True)
 
 @app.post("/api/v1/auth/login")
 def auth_login(payload: Dict[str, Any]):
-    """Authenticates credentials against Supabase Open Source Auth."""
+    """
+    Authenticates credentials against Supabase Open Source Auth.
+    If mandatory MFA is required for unverified email, returns mfa_required=True.
+    Demo account and guest users bypass MFA.
+    """
     email = payload.get("email", "").strip()
     password = payload.get("password", "").strip()
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
-    return login_user(email=email, password=password)
+    return login_user(email=email, password=password, require_mfa=False)
+
+@app.post("/api/v1/auth/verify-mfa")
+def auth_verify_mfa(payload: Dict[str, Any]):
+    """
+    Verifies 6-digit MFA code dispatched to user's email address.
+    Upon verification, issues authenticated Supabase GoTrue JWT.
+    """
+    email = payload.get("email", "").strip()
+    code = str(payload.get("code", "")).strip()
+    if not email or not code:
+        raise HTTPException(status_code=400, detail="Email and 6-digit verification code are required.")
+    return verify_mfa_and_issue_token(email=email, code=code)
+
+@app.post("/api/v1/auth/resend-mfa")
+def auth_resend_mfa(payload: Dict[str, Any]):
+    """Resends a new 6-digit MFA verification code to user's email."""
+    email = payload.get("email", "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email address is required to resend MFA code.")
+    return resend_mfa_code(email=email)
+
+@app.post("/api/v1/auth/guest-login")
+def auth_guest_login():
+    """
+    1-Click instant guest login.
+    Exempt from MFA; initiates clean slate session.
+    """
+    return guest_login_user()
+
+@app.post("/api/v1/auth/demo-login")
+@app.post("/api/v1/auth/demo-admin-login")
+def auth_demo_login():
+    """
+    Instant demo admin login for local testing and evaluative walkthroughs.
+    Exempt from MFA; loads demo ledger state without client password exposure.
+    """
+    return demo_admin_login_user()
 
 @app.post("/api/v1/auth/reset-password")
 def auth_reset_password(payload: Dict[str, Any]):

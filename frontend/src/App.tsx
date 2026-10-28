@@ -13,6 +13,8 @@ import {
   Camera,
   Upload,
   ShieldAlert,
+  ShieldCheck,
+  UserCheck,
   CheckCircle2,
   Database,
   Key,
@@ -37,6 +39,9 @@ import {
   mockRegisterUser,
   mockLoginUser,
   mockResetPassword,
+  mockVerifyMfaCode,
+  mockGenerateMfaCode,
+  mockGuestLogin,
   generateMasterLedgerCsv,
   downloadCsvLocally,
   generateCustomizedDisputeDraft,
@@ -72,6 +77,12 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccessMessage, setAuthSuccessMessage] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Mandatory MFA Email Verification State
+  const [isMfaStep, setIsMfaStep] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaEmail, setMfaEmail] = useState('');
+  const [mfaDevHint, setMfaDevHint] = useState('');
 
   // Chat & Ingestion State
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'agent'; text: string; hitl?: any; analytics?: any; timestamp: string }>>([
@@ -257,10 +268,9 @@ export default function App() {
       setActiveTab('assistant');
     } else {
       try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
+        const res = await fetch(`${API_BASE}/auth/demo-login`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: 'admin@spendtrace.ai', password: 'adminpassword123' })
+          headers: { 'Content-Type': 'application/json' }
         });
         if (res.ok) {
           const data = await res.json();
@@ -476,6 +486,17 @@ export default function App() {
           }
           throw new Error(data.detail || 'Authentication failed');
         }
+
+        // Check if Mandatory MFA Email Verification is required
+        if (data.mfa_required) {
+          setIsMfaStep(true);
+          setMfaEmail(data.email || authEmail);
+          setMfaDevHint(data.dev_code_hint || '');
+          setAuthError('');
+          setAuthSuccessMessage(data.message || 'Mandatory MFA: A 6-digit verification code has been dispatched to your email.');
+          return;
+        }
+
         if (data.user) {
           setCurrentUser(data.user);
         }
@@ -523,15 +544,31 @@ export default function App() {
       try {
         if (authTab === 'login') {
           const result = mockLoginUser(authEmail, authPassword);
-          setCurrentUser(result.user);
-          setAuthToken(result.access_token);
+          if (result.mfa_required) {
+            setIsMfaStep(true);
+            setMfaEmail(result.email || authEmail);
+            setMfaDevHint(result.dev_code_hint || '');
+            setAuthError('');
+            setAuthSuccessMessage(result.message || 'Mandatory MFA: A 6-digit verification code has been dispatched.');
+            return;
+          }
+          if (result.user) setCurrentUser(result.user);
+          if (result.access_token) setAuthToken(result.access_token);
           setShowAuthModal(false);
           setAuthEmail('');
           setAuthPassword('');
         } else if (authTab === 'signup') {
           const result = mockRegisterUser(authEmail, authPassword, authFullName);
-          setCurrentUser(result.user);
-          setAuthToken(result.access_token);
+          if (result.mfa_required) {
+            setIsMfaStep(true);
+            setMfaEmail(result.email || authEmail);
+            setMfaDevHint(result.dev_code_hint || '');
+            setAuthError('');
+            setAuthSuccessMessage(result.message || 'Mandatory MFA: A 6-digit verification code has been dispatched.');
+            return;
+          }
+          if (result.user) setCurrentUser(result.user);
+          if (result.access_token) setAuthToken(result.access_token);
           setShowAuthModal(false);
           setAuthEmail('');
           setAuthPassword('');
@@ -560,6 +597,136 @@ export default function App() {
           setAuthError(mockErr.message || 'Authentication error');
         }
       }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // MFA Code verification handler
+  const handleVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    setAuthSuccessMessage('');
+
+    if (!mfaCode.trim()) {
+      setAuthError("Please enter the 6-digit verification code.");
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-mfa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: mfaEmail, code: mfaCode.trim() })
+      });
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'MFA verification failed');
+        }
+        setCurrentUser(data.user);
+        setAuthToken(data.access_token);
+        setIsMfaStep(false);
+        setShowAuthModal(false);
+        setMfaCode('');
+        setMfaDevHint('');
+        setMfaEmail('');
+        setAuthEmail('');
+        setAuthPassword('');
+        setTransactions([]);
+        setRefunds([]);
+        setActiveTab('assistant');
+        return;
+      }
+      throw new Error("OfflineFallbackTrigger");
+    } catch (err: any) {
+      const errMsg = err?.message || '';
+      if (errMsg !== "OfflineFallbackTrigger" && !errMsg.includes("Unexpected token") && !errMsg.includes("Failed to fetch") && !errMsg.includes("JSON")) {
+        setAuthError(errMsg);
+        setAuthLoading(false);
+        return;
+      }
+      try {
+        const result = mockVerifyMfaCode(mfaEmail, mfaCode.trim());
+        setCurrentUser(result.user);
+        setAuthToken(result.access_token);
+        setIsMfaStep(false);
+        setShowAuthModal(false);
+        setMfaCode('');
+        setMfaDevHint('');
+        setMfaEmail('');
+        setAuthEmail('');
+        setAuthPassword('');
+        setTransactions([]);
+        setRefunds([]);
+        setActiveTab('assistant');
+      } catch (mockErr: any) {
+        setAuthError(mockErr.message || 'Invalid verification code.');
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Resend 6-digit MFA code handler
+  const handleResendMfaCode = async () => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/resend-mfa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: mfaEmail })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMfaDevHint(data.dev_code_hint || '');
+        setAuthSuccessMessage(data.message || `New 6-digit code dispatched to ${mfaEmail}`);
+        return;
+      }
+      throw new Error(data.detail || 'Failed to resend code');
+    } catch (e: any) {
+      const code = mockGenerateMfaCode(mfaEmail);
+      setMfaDevHint(code);
+      setAuthSuccessMessage(`New 6-digit code dispatched to ${mfaEmail}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 1-Click Guest Login (Exempt from MFA, clean slate)
+  const handleGuestLogin = async () => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/guest-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCurrentUser(data.user);
+        setAuthToken(data.access_token);
+        setShowAuthModal(false);
+        setIsMfaStep(false);
+        setTransactions([]);
+        setRefunds([]);
+        setActiveTab('assistant');
+        return;
+      }
+      throw new Error("GuestFallback");
+    } catch (e: any) {
+      const result = mockGuestLogin();
+      setCurrentUser(result.user);
+      setAuthToken(result.access_token);
+      setShowAuthModal(false);
+      setIsMfaStep(false);
+      setTransactions([]);
+      setRefunds([]);
+      setActiveTab('assistant');
     } finally {
       setAuthLoading(false);
     }
@@ -1853,230 +2020,341 @@ export default function App() {
       {showAuthModal && (
         <div className="auth-modal-backdrop" onClick={() => setShowAuthModal(false)}>
           <div className="auth-modal-card" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '18px' }}>
-                <Key size={20} color="var(--google-blue)" />
-                <span>Account Authentication</span>
-              </div>
-              <button className="close-btn" onClick={() => setShowAuthModal(false)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '16px' }}>
-              <button 
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  padding: '8px 0', 
-                  fontSize: '14px', 
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  borderBottom: authTab === 'login' ? '2px solid var(--google-blue)' : '2px solid transparent',
-                  color: authTab === 'login' ? 'var(--google-blue)' : 'var(--text-secondary)'
-                }}
-                onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); }}
-              >
-                Login / Enter
-              </button>
-              <button 
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  padding: '8px 0', 
-                  fontSize: '14px', 
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  borderBottom: authTab === 'signup' ? '2px solid var(--google-blue)' : '2px solid transparent',
-                  color: authTab === 'signup' ? 'var(--google-blue)' : 'var(--text-secondary)'
-                }}
-                onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); }}
-              >
-                Create Account
-              </button>
-              <button 
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  padding: '8px 0', 
-                  fontSize: '14px', 
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  borderBottom: authTab === 'reset' ? '2px solid var(--google-blue)' : '2px solid transparent',
-                  color: authTab === 'reset' ? 'var(--google-blue)' : 'var(--text-secondary)'
-                }}
-                onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
-              >
-                Reset Password
-              </button>
-            </div>
-
-            {authError && (
-              <div style={{ padding: '8px 12px', background: '#fce8e6', color: 'var(--google-red)', borderRadius: '6px', fontSize: '12px' }}>
-                {authError}
-              </div>
-            )}
-
-            {authSuccessMessage && (
-              <div style={{ padding: '8px 12px', background: '#e6f4ea', color: 'var(--google-green)', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle2 size={16} />
-                <span>{authSuccessMessage}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {authTab === 'signup' && (
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Full Name</label>
-                  <input 
-                    type="text" 
-                    required 
-                    placeholder="Jane Doe" 
-                    value={authFullName}
-                    onChange={e => setAuthFullName(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
-                  />
-                </div>
-              )}
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                  {authTab === 'reset' ? 'Account Email or Username' : 'Email or Username'}
-                </label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="e.g. shivani or user@spendtrace.ai" 
-                  value={authEmail}
-                  onChange={e => setAuthEmail(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                  {authTab === 'reset' ? 'New Password' : 'Password'}
-                </label>
-                <input 
-                  type="password" 
-                  required 
-                  placeholder="••••••••" 
-                  value={authPassword}
-                  onChange={e => setAuthPassword(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* Universal Password Guidance & Real-time Policy Checklist */}
-              {(() => {
-                const p = validatePasswordStrength(authPassword);
-                const showChecklist = authTab === 'signup' || authTab === 'reset' || authPassword.length > 0;
-                return (
-                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px 12px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>
-                      Password Guidance & Complexity Rules:
-                    </div>
-                    {showChecklist ? (
-                      <>
-                        <div style={{ color: p.hasMinLength ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                          {p.hasMinLength ? '✓' : '○'} Minimum 10 digits / characters
-                        </div>
-                        <div style={{ color: p.hasUpper ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                          {p.hasUpper ? '✓' : '○'} At least 1 capital letter (A–Z)
-                        </div>
-                        <div style={{ color: p.hasLower ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                          {p.hasLower ? '✓' : '○'} At least 1 small letter (a–z)
-                        </div>
-                        <div style={{ color: p.hasSpecial ? 'var(--google-green)' : 'var(--text-muted)' }}>
-                          {p.hasSpecial ? '✓' : '○'} At least 1 special character (!@#$%^&*...)
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                        Must be at least 10 characters and contain at least 1 capital letter, 1 small letter, and 1 special character.
-                      </div>
-                    )}
+            {isMfaStep ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ textAlign: 'center', padding: '6px 0 2px 0' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e8f0fe', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto' }}>
+                    <ShieldCheck size={26} color="var(--google-blue)" />
                   </div>
-                );
-              })()}
-
-              {authTab === 'reset' && (
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Confirm New Password</label>
-                  <input 
-                    type="password" 
-                    required 
-                    placeholder="Re-enter new password" 
-                    value={authConfirmPassword}
-                    onChange={e => setAuthConfirmPassword(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
-                  />
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
+                    Verify Your Email Address
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
+                    Mandatory Multi-Factor Authentication (MFA) to safeguard your financial records & PII.
+                  </p>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '10px', padding: '4px 12px', background: 'var(--bg-secondary)', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <Mail size={13} color="var(--google-blue)" />
+                    <span>Dispatched code to: <strong>{mfaEmail}</strong></span>
+                  </div>
                 </div>
-              )}
 
-              {authTab === 'login' && (
-                <div style={{ textAlign: 'right', marginTop: '-4px' }}>
+                {authError && (
+                  <div style={{ padding: '8px 12px', background: '#fce8e6', color: 'var(--google-red)', borderRadius: '6px', fontSize: '12px' }}>
+                    {authError}
+                  </div>
+                )}
+
+                {/* Simulated Verification Code Notice */}
+                <div style={{ background: '#e6f4ea', border: '1px solid #b7e1cd', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: '#137333' }}>
+                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                    <CheckCircle2 size={15} /> Dispatched Verification Code:
+                  </div>
+                  <div style={{ fontSize: '13px' }}>
+                    Your 6-digit MFA code is <strong style={{ letterSpacing: '2px', background: '#fff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ceead6' }}>{mfaDevHint || '123456'}</strong> (or enter universal test code <strong>123456</strong>).
+                  </div>
+                </div>
+
+                <form onSubmit={handleVerifyMfa} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', textAlign: 'center' }}>
+                      Enter 6-Digit Verification Code
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      maxLength={6}
+                      autoFocus
+                      placeholder="123456" 
+                      value={mfaCode}
+                      onChange={e => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        borderRadius: '6px', 
+                        border: '2px solid var(--google-blue)', 
+                        fontSize: '22px', 
+                        fontWeight: 700, 
+                        textAlign: 'center',
+                        letterSpacing: '8px',
+                        fontFamily: 'monospace',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
                   <button 
-                    type="button" 
-                    onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
-                    style={{ background: 'none', border: 'none', color: 'var(--google-blue)', fontSize: '12px', cursor: 'pointer', padding: 0 }}
+                    type="submit" 
+                    className="primary-btn" 
+                    disabled={authLoading || mfaCode.length < 6}
+                    style={{ width: '100%', padding: '10px', fontWeight: 600, fontSize: '14px' }}
                   >
-                    Forgot or reset password?
+                    {authLoading ? 'Verifying Code...' : 'Verify Email & Enter SpendTrace'}
+                  </button>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', paddingTop: '2px' }}>
+                    <button 
+                      type="button" 
+                      onClick={handleResendMfaCode}
+                      disabled={authLoading}
+                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                    >
+                      Resend 6-Digit Code
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { setIsMfaStep(false); setAuthError(''); setAuthSuccessMessage(''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}
+                    >
+                      ← Back to Login / Change Email
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '18px' }}>
+                    <Key size={20} color="var(--google-blue)" />
+                    <span>Account Authentication</span>
+                  </div>
+                  <button className="close-btn" onClick={() => setShowAuthModal(false)}>
+                    <X size={18} />
                   </button>
                 </div>
-              )}
 
-              {authTab === 'signup' && (
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '6px' }}>
-                  ✓ Dedicated multi-tenant account with isolated PostgreSQL storage.
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '16px' }}>
+                  <button 
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: '8px 0', 
+                      fontSize: '14px', 
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderBottom: authTab === 'login' ? '2px solid var(--google-blue)' : '2px solid transparent',
+                      color: authTab === 'login' ? 'var(--google-blue)' : 'var(--text-secondary)'
+                    }}
+                    onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); }}
+                  >
+                    Login / Enter
+                  </button>
+                  <button 
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: '8px 0', 
+                      fontSize: '14px', 
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderBottom: authTab === 'signup' ? '2px solid var(--google-blue)' : '2px solid transparent',
+                      color: authTab === 'signup' ? 'var(--google-blue)' : 'var(--text-secondary)'
+                    }}
+                    onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); }}
+                  >
+                    Create Account
+                  </button>
+                  <button 
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: '8px 0', 
+                      fontSize: '14px', 
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderBottom: authTab === 'reset' ? '2px solid var(--google-blue)' : '2px solid transparent',
+                      color: authTab === 'reset' ? 'var(--google-blue)' : 'var(--text-secondary)'
+                    }}
+                    onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
+                  >
+                    Reset Password
+                  </button>
                 </div>
-              )}
 
-              <button 
-                type="submit" 
-                className="primary-btn" 
-                disabled={authLoading}
-                style={{ width: '100%', padding: '10px', marginTop: '6px', fontWeight: 600 }}
-              >
-                {authLoading ? 'Authenticating...' : authTab === 'login' ? 'Login / Enter' : authTab === 'signup' ? 'Create Account' : 'Reset Password'}
-              </button>
-
-              {/* Intuitive switch helper */}
-              <div style={{ textAlign: 'center', fontSize: '12px', marginTop: '4px', color: 'var(--text-secondary)' }}>
-                {authTab === 'login' ? (
-                  <span>
-                    New to SpendTrace?{' '}
-                    <button 
-                      type="button" 
-                      onClick={() => { setAuthTab('signup'); setAuthError(''); }}
-                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
-                    >
-                      Create Account
-                    </button>
-                  </span>
-                ) : authTab === 'signup' ? (
-                  <span>
-                    Already have an account?{' '}
-                    <button 
-                      type="button" 
-                      onClick={() => { setAuthTab('login'); setAuthError(''); }}
-                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
-                    >
-                      Login / Enter
-                    </button>
-                  </span>
-                ) : (
-                  <span>
-                    Remembered password?{' '}
-                    <button 
-                      type="button" 
-                      onClick={() => { setAuthTab('login'); setAuthError(''); }}
-                      style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
-                    >
-                      Login / Enter
-                    </button>
-                  </span>
+                {authError && (
+                  <div style={{ padding: '8px 12px', background: '#fce8e6', color: 'var(--google-red)', borderRadius: '6px', fontSize: '12px' }}>
+                    {authError}
+                  </div>
                 )}
-              </div>
-            </form>
+
+                {authSuccessMessage && (
+                  <div style={{ padding: '8px 12px', background: '#e6f4ea', color: 'var(--google-green)', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckCircle2 size={16} />
+                    <span>{authSuccessMessage}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {authTab === 'signup' && (
+                    <div>
+                      <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Full Name</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Jane Doe" 
+                        value={authFullName}
+                        onChange={e => setAuthFullName(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      {authTab === 'reset' ? 'Account Email Address' : 'Email Address (Personal, corporate, or demo account)'}
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder="e.g. user@gmail.com, yourname@company.org, or admin@spendtrace.ai" 
+                      value={authEmail}
+                      onChange={e => setAuthEmail(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      {authTab === 'reset' ? 'New Password' : 'Password'}
+                    </label>
+                    <input 
+                      type="password" 
+                      required 
+                      placeholder="••••••••" 
+                      value={authPassword}
+                      onChange={e => setAuthPassword(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                    />
+                  </div>
+
+                  {/* Universal Password Guidance & Real-time Policy Checklist */}
+                  {(() => {
+                    const p = validatePasswordStrength(authPassword);
+                    const showChecklist = authTab === 'signup' || authTab === 'reset' || authPassword.length > 0;
+                    return (
+                      <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px 12px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>
+                          Password Guidance & Complexity Rules:
+                        </div>
+                        {showChecklist ? (
+                          <>
+                            <div style={{ color: p.hasMinLength ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                              {p.hasMinLength ? '✓' : '○'} Minimum 10 digits / characters
+                            </div>
+                            <div style={{ color: p.hasUpper ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                              {p.hasUpper ? '✓' : '○'} At least 1 capital letter (A–Z)
+                            </div>
+                            <div style={{ color: p.hasLower ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                              {p.hasLower ? '✓' : '○'} At least 1 small letter (a–z)
+                            </div>
+                            <div style={{ color: p.hasSpecial ? 'var(--google-green)' : 'var(--text-muted)' }}>
+                              {p.hasSpecial ? '✓' : '○'} At least 1 special character (!@#$%^&*...)
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                            Must be at least 10 characters and contain at least 1 capital letter, 1 small letter, and 1 special character.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {authTab === 'reset' && (
+                    <div>
+                      <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Confirm New Password</label>
+                      <input 
+                        type="password" 
+                        required 
+                        placeholder="Re-enter new password" 
+                        value={authConfirmPassword}
+                        onChange={e => setAuthConfirmPassword(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                      />
+                    </div>
+                  )}
+
+                  {authTab === 'login' && (
+                    <div style={{ textAlign: 'right', marginTop: '-4px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthSuccessMessage(''); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--google-blue)', fontSize: '12px', cursor: 'pointer', padding: 0 }}
+                      >
+                        Forgot or reset password?
+                      </button>
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit" 
+                    className="primary-btn" 
+                    disabled={authLoading}
+                    style={{ width: '100%', padding: '10px', marginTop: '4px', fontWeight: 600 }}
+                  >
+                    {authLoading ? 'Authenticating...' : authTab === 'login' ? 'Login / Enter' : authTab === 'signup' ? 'Create Account' : 'Reset Password'}
+                  </button>
+
+                  {/* 1-Click Guest Login Alternative */}
+                  <div style={{ position: 'relative', textAlign: 'center', margin: '4px 0' }}>
+                    <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, borderTop: '1px solid var(--border-color)' }}></div>
+                    <span style={{ position: 'relative', background: 'var(--bg-primary, #fff)', padding: '0 8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      OR RAPID EVALUATION
+                    </span>
+                  </div>
+
+                  <button 
+                    type="button" 
+                    className="secondary-btn"
+                    onClick={handleGuestLogin}
+                    disabled={authLoading}
+                    style={{ width: '100%', padding: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', fontWeight: 500 }}
+                  >
+                    <UserCheck size={16} />
+                    <span>Continue as Guest (No MFA Required)</span>
+                  </button>
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.4 }}>
+                    Demo Admin (<code>admin@spendtrace.ai</code>) and Guest accounts bypass MFA. All custom user emails require mandatory 6-digit MFA verification.
+                  </div>
+
+                  {/* Intuitive switch helper */}
+                  <div style={{ textAlign: 'center', fontSize: '12px', marginTop: '2px', color: 'var(--text-secondary)' }}>
+                    {authTab === 'login' ? (
+                      <span>
+                        New to SpendTrace?{' '}
+                        <button 
+                          type="button" 
+                          onClick={() => { setAuthTab('signup'); setAuthError(''); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                        >
+                          Create Account
+                        </button>
+                      </span>
+                    ) : authTab === 'signup' ? (
+                      <span>
+                        Already have an account?{' '}
+                        <button 
+                          type="button" 
+                          onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                        >
+                          Login / Enter
+                        </button>
+                      </span>
+                    ) : (
+                      <span>
+                        Remembered password?{' '}
+                        <button 
+                          type="button" 
+                          onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                        >
+                          Login / Enter
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

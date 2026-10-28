@@ -13,8 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT,
-    role TEXT NOT NULL DEFAULT 'member',  -- 'admin' or 'member'
+    role TEXT NOT NULL DEFAULT 'member',  -- 'admin', 'member', or 'guest'
     full_name TEXT,
+    email_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
