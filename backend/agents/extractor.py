@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from backend.agents.state import ExtractionContract, LineItemContract
+from backend.agents.categorizer import CategorizationIntelligence
 from backend.config import GEMINI_API_KEY, DEFAULT_MODEL
 
 class IngestionExtractor:
@@ -42,16 +43,9 @@ class IngestionExtractor:
                     merchant = w.capitalize()
                     break
 
-        # 4. Infer Category
-        category = "General"
-        if any(w in text_lower for w in ["coffee", "lunch", "dinner", "pizza", "burger", "drinks", "starbucks", "diner"]):
-            category = "Dining"
-        elif any(w in text_lower for w in ["groceries", "market", "trader joe", "safeway", "whole foods"]):
-            category = "Groceries"
-        elif any(w in text_lower for w in ["uber", "lyft", "gas", "shell", "chevron", "parking"]):
-            category = "Transportation"
-        elif any(w in text_lower for w in ["zara", "target", "amazon", "shoes", "clothes"]):
-            category = "Shopping"
+        # 4. Infer Category using Retailer Intelligence
+        cat_info = CategorizationIntelligence.infer_category(merchant, is_itemized=False, amount=total_amount, notes=text)
+        category = cat_info["category"]
 
         is_return = any(w in text_lower for w in ["return", "refund", "returned"])
 
@@ -110,9 +104,12 @@ class IngestionExtractor:
             except ValueError:
                 amt = 0.0
 
-            clean_merchant = re.sub(r"\b(SQ \*|TST\*|STORE #\d+|AMZN|T-\d+)\b", "", raw_desc).strip()
-            if not clean_merchant:
-                clean_merchant = raw_desc
+            clean_merchant = CategorizationIntelligence.clean_merchant_string(raw_desc)
+            if not raw_cat or raw_cat.lower() in ["general", "uncategorized", "none", "misc", "unknown", ""]:
+                cat_info = CategorizationIntelligence.infer_category(raw_desc, is_itemized=False, amount=amt)
+                final_cat = cat_info["category"]
+            else:
+                final_cat = raw_cat
 
             parsed_records.append({
                 "id": str(uuid.uuid4()),
@@ -120,7 +117,7 @@ class IngestionExtractor:
                 "merchant_raw": raw_desc,
                 "merchant_clean": clean_merchant,
                 "amount": amt,
-                "category": raw_cat if raw_cat else "General",
+                "category": final_cat,
                 "source": "csv_statement",
                 "status": "pending_review",
                 "is_return": 1 if amt < 0 else 0
@@ -228,6 +225,38 @@ class IngestionExtractor:
                 is_return_slip=True,
                 line_items=[
                     LineItemContract(name="Wool Blend Oversized Coat (Returned)", quantity=1.0, unit_price=89.00, total_price=89.00, category_hint="Apparel")
+                ]
+            )
+        elif "marshalls" in filename_lower:
+            # Non-itemized Marshalls receipt -> goes into Apparel
+            return ExtractionContract(
+                merchant_name="Marshalls",
+                receipt_date=str(today - timedelta(days=2)),
+                subtotal=48.75,
+                tax=4.14,
+                tip=0.0,
+                total_amount=52.89,
+                payment_method_last4="4412",
+                confidence_score=0.97,
+                is_return_slip=False,
+                line_items=[
+                    LineItemContract(name="Marshalls Fashion Apparel & Accessories (Non-Itemized Register Total)", quantity=1.0, unit_price=48.75, total_price=48.75, category_hint="Apparel")
+                ]
+            )
+        elif "walmart" in filename_lower:
+            # Non-itemized Walmart receipt -> goes into Groceries
+            return ExtractionContract(
+                merchant_name="Walmart",
+                receipt_date=str(today - timedelta(days=3)),
+                subtotal=84.20,
+                tax=6.74,
+                tip=0.0,
+                total_amount=90.94,
+                payment_method_last4="8821",
+                confidence_score=0.96,
+                is_return_slip=False,
+                line_items=[
+                    LineItemContract(name="Walmart Supercenter Groceries & Essentials (Non-Itemized Register Total)", quantity=1.0, unit_price=84.20, total_price=84.20, category_hint="Groceries")
                 ]
             )
         elif "faded" in filename_lower or "blurry" in filename_lower:

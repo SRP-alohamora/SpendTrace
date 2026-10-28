@@ -38,6 +38,9 @@ from backend.auth.supabase_auth import (
 )
 from backend.observability.tracer import Tracer
 from backend.evals.runner import run_evaluation_suite, get_latest_eval_run, get_all_eval_runs
+from backend.agents.categorizer import CategorizationIntelligence
+from backend.agents.importer import SpreadsheetLedgerImporter
+from backend.integrations.plaid_client import PlaidIntegrationService
 
 from contextlib import asynccontextmanager
 
@@ -454,6 +457,113 @@ def download_submission_docx():
         filename="submission.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
+
+# =============================================================
+# Intelligent Categorization & Ledger / Excel / Bill Importer
+# =============================================================
+
+@app.post("/api/v1/categories/infer")
+def infer_category_endpoint(payload: Dict[str, Any]):
+    """
+    Intelligently infers transaction category from merchant or bill description.
+    Supports non-itemized retailer intelligence (Marshalls -> Apparel, Walmart -> Groceries)
+    and credit card payment debt tracking.
+    """
+    merchant = payload.get("merchant", "").strip()
+    is_itemized = payload.get("is_itemized", False)
+    line_items = payload.get("line_items")
+    amount = payload.get("amount")
+    notes = payload.get("notes")
+    if not merchant:
+        raise HTTPException(status_code=400, detail="Merchant or payee name is required.")
+    return CategorizationIntelligence.infer_category(
+        merchant_name=merchant,
+        is_itemized=is_itemized,
+        line_items=line_items,
+        amount=amount,
+        notes=notes
+    )
+
+@app.post("/api/v1/ledger/import-spreadsheet")
+async def import_spreadsheet(
+    file: UploadFile = File(...),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Parses an uploaded ledger, Excel sheet (.xlsx, .xls), or bill list.
+    Automatically classifies uncategorized entries using SpendTrace Retailer Intelligence.
+    Returns preview with before/after categories and intelligent reasoning.
+    """
+    contents = await file.read()
+    res = SpreadsheetLedgerImporter.parse_and_categorize_spreadsheet(
+        file_bytes=contents,
+        filename=file.filename
+    )
+    return res
+
+@app.post("/api/v1/ledger/commit-spreadsheet")
+def commit_spreadsheet_ledger(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Commits previewed and verified spreadsheet records into user's ledger."""
+    records = payload.get("records", [])
+    if not records:
+        raise HTTPException(status_code=400, detail="No records provided to commit.")
+    count = SpreadsheetLedgerImporter.commit_records_to_ledger(records, current_user["id"])
+    return {
+        "status": "ok",
+        "committed_count": count,
+        "message": f"Successfully imported and categorized {count} transaction(s) into your ledger."
+    }
+
+@app.get("/api/v1/ledger/sample-bills-template")
+def get_sample_bills_template():
+    """Generates a downloadable sample Excel sheet (.xlsx) of uncategorized bills & expenses for testing."""
+    excel_bytes = SpreadsheetLedgerImporter.generate_sample_bills_excel()
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=spendtrace_sample_bills_ledger.xlsx"}
+    )
+
+# =============================================================
+# Plaid API Integration & Bank / Credit Card Payment Sync
+# =============================================================
+
+@app.post("/api/v1/plaid/create-link-token")
+def plaid_create_link_token(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Creates a Plaid Link token for client initialization."""
+    return PlaidIntegrationService.create_link_token(current_user["id"])
+
+@app.post("/api/v1/plaid/exchange-public-token")
+def plaid_exchange_public_token(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Exchanges public_token from Plaid Link for access_token and provisions account link."""
+    public_token = payload.get("public_token", "")
+    inst_id = payload.get("institution_id", "ins_chase")
+    return PlaidIntegrationService.exchange_public_token(public_token, current_user["id"], institution_id=inst_id)
+
+@app.get("/api/v1/plaid/accounts")
+def plaid_get_accounts(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Retrieves all connected bank accounts, credit limits, and credit card liabilities."""
+    return PlaidIntegrationService.get_connected_accounts_and_liabilities(current_user["id"])
+
+@app.post("/api/v1/plaid/sync")
+def plaid_sync_feed(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Syncs Plaid live transactions feed and applies SpendTrace Intelligent Categorization."""
+    return PlaidIntegrationService.sync_plaid_transactions(current_user["id"])
+
+@app.post("/api/v1/plaid/sandbox-connect")
+def plaid_sandbox_connect(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """1-Click instant connection to sandbox institutions (Chase, Amex, BofA, Citi)."""
+    inst_id = payload.get("institution_id", "ins_chase")
+    return PlaidIntegrationService.exchange_public_token("public-sandbox-mock-token", current_user["id"], institution_id=inst_id)
 
 # =============================================================
 # Continuous Evals & Observability Endpoints (Guarded by IAM Admin)

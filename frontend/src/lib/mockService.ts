@@ -1040,3 +1040,369 @@ SpendTrace Intelligence Account`;
   };
 }
 
+// ==========================================
+// INTELLIGENT CATEGORIZATION & PLAID ENGINE
+// ==========================================
+
+export interface CategoryInferenceResult {
+  merchant: string;
+  category: string;
+  confidence: number;
+  reasoning: string;
+  is_itemized: boolean;
+  is_credit_card_payment?: boolean;
+  is_bill?: boolean;
+}
+
+export function mockInferCategory(
+  merchant: string,
+  isItemized: boolean = false,
+  lineItems: string[] = []
+): CategoryInferenceResult {
+  const m = (merchant || '').trim().toLowerCase();
+
+  // Credit card payment autopay / transfer detection
+  const ccPaymentMatches = [
+    'chase autopay', 'chase credit card', 'amex epayment', 'american express payment',
+    'citi card payment', 'citi autopay', 'capital one payment', 'bank of america credit card bill',
+    'discover payment', 'barclays payment', 'credit card payment', 'payment thank you'
+  ];
+  if (ccPaymentMatches.some(p => m.includes(p))) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Credit Card Payment',
+      confidence: 0.99,
+      reasoning: 'Payment to credit card account. Excluded from monthly spend to prevent double-counting against card purchase charges.',
+      is_itemized: isItemized,
+      is_credit_card_payment: true
+    };
+  }
+
+  // Exact Benchmark 1: Marshalls -> Apparel
+  if (m.includes('marshalls') || m.includes('marshall') || m.includes('tj maxx') || m.includes('t.j. maxx')) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Apparel',
+      confidence: 0.98,
+      reasoning: 'Marshalls is an off-price department retailer specializing in brand-name clothing and apparel. Classified as Apparel with 98% confidence.',
+      is_itemized: isItemized
+    };
+  }
+
+  // Exact Benchmark 2: Walmart (Non-itemized vs Itemized)
+  if (m.includes('walmart') || m.includes('wal-mart')) {
+    if (!isItemized || lineItems.length === 0) {
+      return {
+        merchant: merchant.trim(),
+        category: 'Groceries',
+        confidence: 0.96,
+        reasoning: 'Walmart non-itemized receipt default to Groceries per consumer staples heuristic (96% confidence).',
+        is_itemized: false
+      };
+    }
+    // Itemized check
+    const itemsStr = lineItems.join(' ').toLowerCase();
+    if (itemsStr.includes('ipad') || itemsStr.includes('tv') || itemsStr.includes('laptop') || itemsStr.includes('headphone') || itemsStr.includes('electronics')) {
+      return {
+        merchant: merchant.trim(),
+        category: 'Electronics',
+        confidence: 0.95,
+        reasoning: 'Walmart itemized receipt: primary value derived from electronic equipment line items.',
+        is_itemized: true
+      };
+    }
+    return {
+      merchant: merchant.trim(),
+      category: 'Groceries',
+      confidence: 0.92,
+      reasoning: 'Walmart itemized receipt: grocery line items dominate invoice.',
+      is_itemized: true
+    };
+  }
+
+  // Utility Bills
+  const utilityMatches = [
+    'pacific gas', 'pg&e', 'pge', 'coned', 'consolidated edison', 'verizon', 'at&t',
+    't-mobile', 'comcast', 'xfinity', 'national grid', 'water district', 'duke energy'
+  ];
+  if (utilityMatches.some(u => m.includes(u))) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Bills & Utilities',
+      confidence: 0.97,
+      reasoning: 'Recurring residential utility provider (electric, gas, or telecommunications).',
+      is_itemized: isItemized,
+      is_bill: true
+    };
+  }
+
+  // Apparel & Footwear
+  if (m.includes('zara') || m.includes('h&m') || m.includes('gap') || m.includes('nordstrom') || m.includes('nike') || m.includes('lulu')) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Apparel',
+      confidence: 0.97,
+      reasoning: 'Dedicated fashion, athletic wear, and footwear merchant.',
+      is_itemized: isItemized
+    };
+  }
+
+  // Groceries & Supermarkets
+  if (m.includes('trader joe') || m.includes('whole foods') || m.includes('safeway') || m.includes('kroger') || m.includes('costco')) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Groceries',
+      confidence: 0.97,
+      reasoning: 'Supermarket and grocery retailer.',
+      is_itemized: isItemized
+    };
+  }
+
+  // Dining & Restaurants
+  if (m.includes('nobu') || m.includes('osteria') || m.includes('sushi') || m.includes('starbucks') || m.includes('chipotle') || m.includes('restaurant')) {
+    return {
+      merchant: merchant.trim(),
+      category: 'Dining',
+      confidence: 0.95,
+      reasoning: 'Restaurant, cafe, or food establishment.',
+      is_itemized: isItemized
+    };
+  }
+
+  // Default fallback
+  return {
+    merchant: merchant.trim(),
+    category: 'General',
+    confidence: 0.60,
+    reasoning: 'General merchant spending.',
+    is_itemized: isItemized
+  };
+}
+
+export const MOCK_SAMPLE_BILLS: Array<{
+  row_id: number;
+  date: string;
+  merchant_raw: string;
+  merchant_clean: string;
+  amount: number;
+  original_category: string;
+  inferred_category: string;
+  confidence: number;
+  reasoning: string;
+  is_credit_card_payment: boolean;
+  is_bill: boolean;
+}> = [
+  {
+    row_id: 1,
+    date: '2026-10-22',
+    merchant_raw: 'MARSHALLS STORE #0842 NY',
+    merchant_clean: 'Marshalls',
+    amount: 89.40,
+    original_category: 'Uncategorized',
+    inferred_category: 'Apparel',
+    confidence: 0.98,
+    reasoning: 'Marshalls is an off-price department retailer specializing in brand-name clothing and apparel. Classified as Apparel with 98% confidence.',
+    is_credit_card_payment: false,
+    is_bill: false
+  },
+  {
+    row_id: 2,
+    date: '2026-10-23',
+    merchant_raw: 'WALMART SUPERCENTER #1593 (NON-ITEMIZED REGISTER)',
+    merchant_clean: 'Walmart',
+    amount: 142.18,
+    original_category: 'Unknown',
+    inferred_category: 'Groceries',
+    confidence: 0.96,
+    reasoning: 'Walmart non-itemized receipt default to Groceries per consumer staples heuristic (96% confidence).',
+    is_credit_card_payment: false,
+    is_bill: false
+  },
+  {
+    row_id: 3,
+    date: '2026-10-20',
+    merchant_raw: 'PACIFIC GAS & ELECTRIC (PG&E)',
+    merchant_clean: 'Pacific Gas & Electric (PG&E)',
+    amount: 184.50,
+    original_category: 'General',
+    inferred_category: 'Bills & Utilities',
+    confidence: 0.97,
+    reasoning: 'Recurring residential utility provider (electric, gas, or telecommunications).',
+    is_credit_card_payment: false,
+    is_bill: true
+  },
+  {
+    row_id: 4,
+    date: '2026-10-21',
+    merchant_raw: 'CHASE AUTOPAY PAYMENT - THANK YOU',
+    merchant_clean: 'Chase Autopay',
+    amount: 500.00,
+    original_category: 'Transfer / Uncategorized',
+    inferred_category: 'Credit Card Payment',
+    confidence: 0.99,
+    reasoning: 'Payment to credit card account. Excluded from monthly spend to prevent double-counting against card purchase charges.',
+    is_credit_card_payment: true,
+    is_bill: false
+  },
+  {
+    row_id: 5,
+    date: '2026-10-18',
+    merchant_raw: 'CONSOLIDATED EDISON BILL AUTOPAY',
+    merchant_clean: 'Consolidated Edison',
+    amount: 92.30,
+    original_category: 'Utilities',
+    inferred_category: 'Bills & Utilities',
+    confidence: 0.97,
+    reasoning: 'Monthly municipal utility bill (electric & gas).',
+    is_credit_card_payment: false,
+    is_bill: true
+  },
+  {
+    row_id: 6,
+    date: '2026-10-16',
+    merchant_raw: 'VERIZON WIRELESS BILL PAY',
+    merchant_clean: 'Verizon Wireless',
+    amount: 115.00,
+    original_category: 'Phone / Telecommunications',
+    inferred_category: 'Bills & Utilities',
+    confidence: 0.97,
+    reasoning: 'Monthly mobile carrier service.',
+    is_credit_card_payment: false,
+    is_bill: true
+  }
+];
+
+export const MOCK_PLAID_DATA = {
+  status: 'connected',
+  institution_name: 'Plaid Multi-Account Sync (Chase, Amex, Citi, BofA)',
+  accounts: [
+    {
+      account_id: 'acc_chase_sapphire',
+      name: 'Chase Sapphire Reserve',
+      official_name: 'Chase Sapphire Reserve Visa Infinite',
+      type: 'credit',
+      subtype: 'credit card',
+      mask: '4821',
+      current_balance: 1420.50,
+      credit_limit: 15000.00,
+      utilization_rate_pct: 9.47,
+      minimum_payment_due: 45.00,
+      next_payment_due_date: '2026-11-15',
+      apr_percentage: 22.49,
+      is_overdue: false
+    },
+    {
+      account_id: 'acc_amex_blue',
+      name: 'American Express Blue Cash',
+      official_name: 'Amex Blue Cash Preferred',
+      type: 'credit',
+      subtype: 'credit card',
+      mask: '1004',
+      current_balance: 890.75,
+      credit_limit: 10000.00,
+      utilization_rate_pct: 8.91,
+      minimum_payment_due: 35.00,
+      next_payment_due_date: '2026-11-18',
+      apr_percentage: 19.99,
+      is_overdue: false
+    },
+    {
+      account_id: 'acc_citi_double',
+      name: 'Citi Double Cash',
+      official_name: 'Citi Double Cash Mastercard',
+      type: 'credit',
+      subtype: 'credit card',
+      mask: '9211',
+      current_balance: 1809.20,
+      credit_limit: 10000.00,
+      utilization_rate_pct: 18.09,
+      minimum_payment_due: 60.00,
+      next_payment_due_date: '2026-11-22',
+      apr_percentage: 21.24,
+      is_overdue: false
+    },
+    {
+      account_id: 'acc_bofa_chk',
+      name: 'Bank of America Advantage Checking',
+      official_name: 'BofA Preferred Rewards Checking',
+      type: 'depository',
+      subtype: 'checking',
+      mask: '3109',
+      current_balance: 6420.10,
+      credit_limit: null,
+      utilization_rate_pct: null,
+      minimum_payment_due: null,
+      next_payment_due_date: null,
+      apr_percentage: null,
+      is_overdue: false
+    }
+  ],
+  liabilities_summary: {
+    total_credit_debt: 4120.45,
+    total_credit_limit: 35000.00,
+    aggregate_utilization_pct: 11.77,
+    total_minimum_payment_due: 140.00,
+    next_due_date: '2026-11-15',
+    checking_cash_buffer: 6420.10
+  }
+};
+
+export const MOCK_PLAID_SYNCED_TRANSACTIONS = [
+  {
+    id: 'plaid_tx_01',
+    date: '2026-10-26',
+    merchant_clean: 'Marshalls',
+    merchant_raw: 'MARSHALLS #0421 QUEENS NY',
+    amount: 64.20,
+    category: 'Apparel',
+    status: 'verified',
+    is_return: 0,
+    has_receipt: false,
+    source: 'Plaid Sync (Chase Sapphire)',
+    is_credit_card_payment: false,
+    created_at: '2026-10-26T18:00:00Z'
+  },
+  {
+    id: 'plaid_tx_02',
+    date: '2026-10-25',
+    merchant_clean: 'Walmart',
+    merchant_raw: 'WALMART STORE #2241 (NON-ITEMIZED)',
+    amount: 112.50,
+    category: 'Groceries',
+    status: 'verified',
+    is_return: 0,
+    has_receipt: false,
+    source: 'Plaid Sync (Amex Blue)',
+    is_credit_card_payment: false,
+    created_at: '2026-10-25T14:30:00Z'
+  },
+  {
+    id: 'plaid_tx_03',
+    date: '2026-10-24',
+    merchant_clean: 'Chase Autopay',
+    merchant_raw: 'CHASE CREDIT CRD AUTOPAY',
+    amount: 450.00,
+    category: 'Credit Card Payment',
+    status: 'verified',
+    is_return: 0,
+    has_receipt: false,
+    source: 'Plaid Sync (BofA Checking)',
+    is_credit_card_payment: true,
+    created_at: '2026-10-24T09:00:00Z'
+  },
+  {
+    id: 'plaid_tx_04',
+    date: '2026-10-21',
+    merchant_clean: 'Pacific Gas & Electric (PG&E)',
+    merchant_raw: 'PG&E UTILITY PMT',
+    amount: 142.10,
+    category: 'Bills & Utilities',
+    status: 'verified',
+    is_return: 0,
+    has_receipt: false,
+    source: 'Plaid Sync (BofA Checking)',
+    is_credit_card_payment: false,
+    created_at: '2026-10-21T11:15:00Z'
+  }
+];
+

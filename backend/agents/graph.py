@@ -161,9 +161,14 @@ def database_commit_node(state: AgentState) -> Dict[str, Any]:
             m_date = item.get("receipt_date") or item.get("date", str(datetime.now().date()))
             amt = float(item.get("total_amount") or item.get("amount", 0.0))
             is_return = 1 if (item.get("is_return_slip") or item.get("is_return")) else 0
-            cat = "General"
-            if item.get("line_items") and len(item["line_items"]) > 0:
-                cat = item["line_items"][0].get("category_hint", "General") or "General"
+            from backend.agents.categorizer import CategorizationIntelligence
+            cat = item.get("category")
+            if not cat or cat == "General":
+                if item.get("line_items") and len(item["line_items"]) > 0:
+                    cat = item["line_items"][0].get("category_hint", "General")
+                if not cat or cat == "General":
+                    cat_info = CategorizationIntelligence.infer_category(m_name, is_itemized=bool(item.get("line_items")), line_items=item.get("line_items"), amount=amt)
+                    cat = cat_info["category"]
             
             # 1. Insert receipt record
             cursor.execute(
