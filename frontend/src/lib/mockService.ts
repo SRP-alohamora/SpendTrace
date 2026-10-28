@@ -921,6 +921,38 @@ export const VENDOR_SUPPORT_DIRECTORY: Record<string, Omit<VendorSupportInfo, 'e
     domain: "wholefoodsmarket.com",
     department: "Whole Foods Customer Care",
     source_citation: "Whole Foods Market Customer Service (https://www.wholefoodsmarket.com/customer-service)"
+  },
+  "marshalls": {
+    canonical_name: "Marshalls",
+    support_email: "customer.service@marshalls.com",
+    support_url: "https://www.marshalls.com/us/store/jump/topic/Return-Policy/2400016",
+    domain: "marshalls.com",
+    department: "Marshalls Customer Experience & Returns",
+    source_citation: "Marshalls Official Return Policy & Customer Service (https://www.marshalls.com/us/store/jump/topic/Return-Policy/2400016)"
+  },
+  "walmart": {
+    canonical_name: "Walmart",
+    support_email: "help@walmart.com",
+    support_url: "https://www.walmart.com/help/article/walmart-standard-return-policy/3221592e5394416684aa54eb3d50eb97",
+    domain: "walmart.com",
+    department: "Walmart Customer Care & Returns Dept",
+    source_citation: "Walmart Official Standard Return Policy (https://www.walmart.com/help)"
+  },
+  "restaurant": {
+    canonical_name: "Restaurant",
+    support_email: "guest_relations@restaurant.com",
+    support_url: "https://www.restaurant.com/help",
+    domain: "restaurant.com",
+    department: "Guest Relations & Dispute Services",
+    source_citation: "Restaurant Merchant Support & Billing (https://www.restaurant.com/help)"
+  },
+  "at&t": {
+    canonical_name: "AT&T",
+    support_email: "billing.support@att.com",
+    support_url: "https://www.att.com/support/article/wireless/KM1008860/",
+    domain: "att.com",
+    department: "AT&T Wireless Billing & Dispute Resolution",
+    source_citation: "AT&T Wireless Support & Return Policy (https://www.att.com/support/)"
   }
 };
 
@@ -1403,6 +1435,133 @@ export const MOCK_PLAID_SYNCED_TRANSACTIONS = [
     source: 'Plaid Sync (BofA Checking)',
     is_credit_card_payment: false,
     created_at: '2026-10-21T11:15:00Z'
+  }
+];
+
+// Exact 4 benchmark purchases depicted in the user's Frontpage and Refund Radar diagrams
+export const MOCK_FRONTPAGE_JOURNEY_ITEMS = [
+  {
+    step: 1,
+    merchant: "Restaurant",
+    description: "Dinner",
+    subtotal: 42.80,
+    tax: 3.90,
+    amount: 46.70,
+    category: "Outside Food",
+    category_color: "#EA580C",
+    icon: "Utensils",
+    date: "Oct 28, 2026",
+    receipt_tag: "Thank you!"
+  },
+  {
+    step: 2,
+    merchant: "Marshalls",
+    description: "Apparel",
+    subtotal: 35.99,
+    tax: 2.70,
+    amount: 38.69,
+    category: "Apparel",
+    category_color: "#2563EB",
+    icon: "ShoppingBag",
+    date: "Oct 28, 2026",
+    receipt_tag: "Thank you!"
+  },
+  {
+    step: 3,
+    merchant: "Walmart",
+    description: "Groceries",
+    subtotal: 82.14,
+    tax: 6.78,
+    amount: 88.92,
+    category: "Grocery",
+    category_color: "#16A34A",
+    icon: "ShoppingCart",
+    date: "Oct 28, 2026",
+    receipt_tag: "Save money. Live better."
+  },
+  {
+    step: 4,
+    merchant: "AT&T",
+    description: "Mobile Service (Phone Bill)",
+    subtotal: 75.00,
+    tax: 0.00,
+    amount: 75.00,
+    category: "Utility Bills",
+    category_color: "#9333EA",
+    icon: "Wifi",
+    date: "Oct 28, 2026",
+    receipt_tag: "AutoPay - Thank you!"
+  }
+];
+
+export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
+  {
+    id: "radar_row_1",
+    date: "Oct 28, 2026",
+    merchant_name: "Restaurant",
+    merchant_clean: "Restaurant",
+    item_description: "Dinner",
+    item_count_label: "1 item",
+    amount: 46.70,
+    expected_amount: 46.70,
+    category: "Outside Food",
+    category_class: "dining",
+    eligibility_status: "Possible",
+    eligibility_window: "Check with merchant",
+    badge_variant: "amber",
+    action_label: "Start Refund",
+    is_return: 1
+  },
+  {
+    id: "radar_row_2",
+    date: "Oct 28, 2026",
+    merchant_name: "Marshalls",
+    merchant_clean: "Marshalls",
+    item_description: "Apparel",
+    item_count_label: "1 item",
+    amount: 38.69,
+    expected_amount: 38.69,
+    category: "Apparel",
+    category_class: "apparel",
+    eligibility_status: "Eligible",
+    eligibility_window: "Within 30 days",
+    badge_variant: "green",
+    action_label: "Start Return",
+    is_return: 1
+  },
+  {
+    id: "radar_row_3",
+    date: "Oct 28, 2026",
+    merchant_name: "Walmart",
+    merchant_clean: "Walmart",
+    item_description: "Groceries",
+    item_count_label: "5 items",
+    amount: 88.92,
+    expected_amount: 88.92,
+    category: "Grocery",
+    category_class: "groceries",
+    eligibility_status: "Eligible",
+    eligibility_window: "Within 7 days",
+    badge_variant: "green",
+    action_label: "Start Return",
+    is_return: 1
+  },
+  {
+    id: "radar_row_4",
+    date: "Oct 28, 2026",
+    merchant_name: "AT&T",
+    merchant_clean: "AT&T",
+    item_description: "Mobile Service",
+    item_count_label: "Monthly Bill",
+    amount: 75.00,
+    expected_amount: 75.00,
+    category: "Utility Bills",
+    category_class: "bills",
+    eligibility_status: "Possible",
+    eligibility_window: "Contact AT&T",
+    badge_variant: "amber",
+    action_label: "Start Refund",
+    is_return: 1
   }
 ];
 

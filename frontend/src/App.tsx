@@ -21,12 +21,20 @@ import {
   LogOut,
   Mail,
   ExternalLink,
-  Copy,
-  Check,
-  CreditCard,
-  Layers,
-  FileSpreadsheet
+  Copy, 
+  Check, 
+  CreditCard, 
+  Layers, 
+  FileSpreadsheet,
+  Home,
+  Star,
+  UserPlus,
+  Clock,
+  ChevronRight
 } from 'lucide-react';
+
+import spendtraceFrontpageImg from './assets/spendtrace_frontpage.jpg';
+import spendtraceRefundRadarImg from './assets/spendtrace_refund_radar.jpg';
 
 import { 
   isGitHubPagesDeployment, 
@@ -37,29 +45,31 @@ import {
   MOCK_EVAL_DATA, 
   MOCK_TRACES, 
   MOCK_OBS_METRICS, 
-  handleMockChatResponse,
-  validatePasswordStrength,
-  mockRegisterUser,
-  mockLoginUser,
-  mockResetPassword,
-  mockVerifyMfaCode,
-  mockGenerateMfaCode,
-  mockGuestLogin,
-  generateMasterLedgerCsv,
-  downloadCsvLocally,
-  generateCustomizedDisputeDraft,
-  type VendorSupportInfo,
-  mockInferCategory,
-  MOCK_SAMPLE_BILLS,
-  MOCK_PLAID_DATA,
-  MOCK_PLAID_SYNCED_TRANSACTIONS,
-  type CategoryInferenceResult
+  handleMockChatResponse, 
+  validatePasswordStrength, 
+  mockRegisterUser, 
+  mockLoginUser, 
+  mockResetPassword, 
+  mockVerifyMfaCode, 
+  mockGenerateMfaCode, 
+  mockGuestLogin, 
+  generateMasterLedgerCsv, 
+  downloadCsvLocally, 
+  generateCustomizedDisputeDraft, 
+  type VendorSupportInfo, 
+  mockInferCategory, 
+  MOCK_SAMPLE_BILLS, 
+  MOCK_PLAID_DATA, 
+  MOCK_PLAID_SYNCED_TRANSACTIONS, 
+  type CategoryInferenceResult,
+  MOCK_FRONTPAGE_JOURNEY_ITEMS,
+  MOCK_RADAR_ELIGIBLE_PURCHASES
 } from './lib/mockService';
 
 const API_BASE = '/api/v1';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'assistant' | 'radar' | 'plaid' | 'compare' | 'evals' | 'observability'>('assistant');
+  const [activeTab, setActiveTab] = useState<'frontpage' | 'assistant' | 'radar' | 'plaid' | 'compare' | 'evals' | 'observability'>('frontpage');
   
   // Auth & IAM State (Compatible with Supabase Open Source Auth)
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string; role: string; full_name?: string } | null>(() => {
@@ -77,7 +87,7 @@ export default function App() {
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('spendtrace_token') || '');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authTab, setAuthTab] = useState<'login' | 'signup' | 'reset'>('login');
+  const [authTab, setAuthTab] = useState<'demo' | 'login' | 'signup' | 'reset'>('demo');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
@@ -488,6 +498,105 @@ export default function App() {
       setTransactions(MOCK_BENCHMARK_TRANSACTIONS);
       setRefunds(MOCK_REFUNDS);
     }
+  };
+
+  // 1-Click Demo Admin Quick Login
+  const handleDemoAdminLogin = async () => {
+    setShowAuthModal(false);
+    setShowUserDropdown(false);
+    setIsMfaStep(false);
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/demo-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user);
+        setAuthToken(data.access_token);
+      } else {
+        setCurrentUser(MOCK_ADMIN_USER);
+        setAuthToken('mock_admin_jwt_token');
+      }
+    } catch (e) {
+      setCurrentUser(MOCK_ADMIN_USER);
+      setAuthToken('mock_admin_jwt_token');
+    } finally {
+      setTransactions(MOCK_BENCHMARK_TRANSACTIONS);
+      setRefunds(MOCK_REFUNDS);
+      setAuthLoading(false);
+      setAuthSuccessMessage("Logged in as Demo Admin (admin@spendtrace.ai) • Rich benchmark ledger loaded");
+      setTimeout(() => setAuthSuccessMessage(''), 3000);
+    }
+  };
+
+  // Load the 4 Frontpage Diagram Purchases directly into Master Ledger
+  const handleLoadFrontpageBenchmarkTxs = () => {
+    const frontpageTxs = [
+      {
+        id: `fp_${Date.now()}_1`,
+        date: "2026-10-28",
+        merchant_clean: "Restaurant",
+        merchant_raw: "RESTAURANT - DINNER ($42.80 + TAX $3.90)",
+        amount: 46.70,
+        category: "Outside Food",
+        status: "verified",
+        is_return: 0,
+        has_receipt: true,
+        source: "Frontpage Receipt (Step 1)",
+        created_at: "2026-10-28T19:30:00Z"
+      },
+      {
+        id: `fp_${Date.now()}_2`,
+        date: "2026-10-28",
+        merchant_clean: "Marshalls",
+        merchant_raw: "MARSHALLS STORE #0842 ($35.99 + TAX $2.70)",
+        amount: 38.69,
+        category: "Apparel",
+        status: "verified",
+        is_return: 0,
+        has_receipt: true,
+        source: "Frontpage Receipt (Step 2 - 98% Apparel)",
+        created_at: "2026-10-28T17:15:00Z"
+      },
+      {
+        id: `fp_${Date.now()}_3`,
+        date: "2026-10-28",
+        merchant_clean: "Walmart",
+        merchant_raw: "WALMART SUPERCENTER ($82.14 + TAX $6.78)",
+        amount: 88.92,
+        category: "Grocery",
+        status: "verified",
+        is_return: 0,
+        has_receipt: true,
+        source: "Frontpage Receipt (Step 3 - 96% Grocery)",
+        created_at: "2026-10-28T15:40:00Z"
+      },
+      {
+        id: `fp_${Date.now()}_4`,
+        date: "2026-10-28",
+        merchant_clean: "AT&T",
+        merchant_raw: "AT&T MOBILITY AUTOPAY - THANK YOU!",
+        amount: 75.00,
+        category: "Utility Bills",
+        status: "verified",
+        is_return: 0,
+        has_receipt: true,
+        source: "Frontpage Receipt (Step 4 - Mobile Service)",
+        created_at: "2026-10-28T09:00:00Z"
+      }
+    ];
+    setTransactions(prev => [...frontpageTxs, ...prev]);
+    setActiveTab('assistant');
+    setMessages(prev => [
+      ...prev,
+      {
+        sender: 'agent' as const,
+        text: `Loaded 4 Frontpage Journey transactions totaling **$249.31** into Master Ledger: Restaurant ($46.70 Outside Food), Marshalls ($38.69 Apparel), Walmart ($88.92 Grocery), and AT&T ($75.00 Utility Bills).`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
   };
 
   // Log out current user and clear local session
@@ -1236,6 +1345,13 @@ export default function App() {
 
         <nav className="nav-tabs">
           <button 
+            className={`tab-btn ${activeTab === 'frontpage' ? 'active' : ''}`}
+            onClick={() => setActiveTab('frontpage')}
+          >
+            <Home size={14} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+            Home / Frontpage
+          </button>
+          <button 
             className={`tab-btn ${activeTab === 'assistant' ? 'active' : ''}`}
             onClick={() => setActiveTab('assistant')}
           >
@@ -1282,7 +1398,37 @@ export default function App() {
 
         {/* User Profile, IAM Status & Controls */}
         <div className="nav-status">
-          {currentUser ? (
+          {/* 1-Click Demo Admin Quick Launch */}
+          <button 
+            className="demo-admin-nav-btn"
+            onClick={handleDemoAdminLogin}
+            title="1-Click Instant Login as Demo Admin (admin@spendtrace.ai) with full rich ledger & evaluations"
+          >
+            <Star size={13} fill="#FFFFFF" />
+            <span>Demo Admin</span>
+          </button>
+
+          {!currentUser ? (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="secondary-btn"
+                onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
+                title="Create a new account"
+                style={{ padding: '6px 12px', fontSize: '12.5px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <UserPlus size={14} />
+                <span>Register</span>
+              </button>
+              <button 
+                className="primary-btn signin-nav-btn"
+                onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
+                title="Login / Enter SpendTrace"
+              >
+                <Key size={14} />
+                <span>Login</span>
+              </button>
+            </div>
+          ) : (
             <button 
               className="logout-nav-btn"
               onClick={handleLogout}
@@ -1290,15 +1436,6 @@ export default function App() {
             >
               <LogOut size={14} />
               <span>Log Out</span>
-            </button>
-          ) : (
-            <button 
-              className="primary-btn signin-nav-btn"
-              onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
-              title="Login / Enter SpendTrace"
-            >
-              <Key size={14} />
-              <span>Login / Enter</span>
             </button>
           )}
 
@@ -1402,6 +1539,243 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="main-content">
+        {/* Tab 0: SpendTrace Frontpage Showcase */}
+        {activeTab === 'frontpage' && (
+          <div className="frontpage-view">
+            {/* Frontpage Hero Header */}
+            <div className="frontpage-hero-header">
+              <div className="frontpage-badge">
+                <Sparkles size={14} color="var(--google-blue)" />
+                <span>SpendTrace v2.4 • Automated Receipt-to-Ledger Intelligence</span>
+              </div>
+              <h1 className="frontpage-title">
+                Autonomous Purchase Intelligence & Refund Concierge
+              </h1>
+              <p className="frontpage-subtitle">
+                Turn physical receipt photos, digital invoices, and uncategorized bank transactions into an itemized, auditable master ledger. Track return windows with automated Refund Radar alerts and sync credit card liabilities in one unified view.
+              </p>
+
+              {/* Action Buttons Row */}
+              <div className="frontpage-cta-row">
+                <button 
+                  className="primary-btn"
+                  onClick={handleDemoAdminLogin}
+                  style={{ padding: '10px 20px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 8px rgba(26,115,232,0.35)' }}
+                >
+                  <Star size={16} fill="#FFFFFF" />
+                  <span>Enter as Demo Admin</span>
+                </button>
+                <button 
+                  className="secondary-btn"
+                  onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
+                  style={{ padding: '10px 18px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <UserPlus size={15} />
+                  <span>Register Account</span>
+                </button>
+                <button 
+                  className="secondary-btn"
+                  onClick={() => { setAuthTab('login'); setAuthError(''); setAuthSuccessMessage(''); setShowAuthModal(true); }}
+                  style={{ padding: '10px 18px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Key size={15} />
+                  <span>Login</span>
+                </button>
+                <button 
+                  className="secondary-btn"
+                  onClick={() => setActiveTab('assistant')}
+                  style={{ padding: '10px 18px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Bot size={15} color="var(--google-blue)" />
+                  <span>Open Assistant & Ledger</span>
+                </button>
+                <button 
+                  className="secondary-btn"
+                  onClick={() => setActiveTab('radar')}
+                  style={{ padding: '10px 18px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <ShieldAlert size={15} color="var(--google-blue)" />
+                  <span>View Refund Radar</span>
+                </button>
+                <button 
+                  className="secondary-btn"
+                  onClick={handleLoadFrontpageBenchmarkTxs}
+                  title="Inject the 4 benchmark diagram purchases ($249.31) into live master ledger"
+                  style={{ padding: '10px 18px', fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#F1F3F4' }}
+                >
+                  <Database size={15} color="var(--google-green)" />
+                  <span>Load $249.31 Diagram into Ledger</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Frontpage Hero Image Showcase Card */}
+            <div className="frontpage-image-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 16px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#34A853' }} />
+                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+                    SpendTrace Autonomous Pipeline: Receipt Ingestion → Intelligent Category Mapping → Expense Ledger ($249.31)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Oct 28, 2026 Purchase Sequence
+                  </span>
+                  <span className="status-pill green">
+                    4 Verified Receipts
+                  </span>
+                </div>
+              </div>
+
+              {/* High-Resolution Frontpage Diagram Image */}
+              <img 
+                src={spendtraceFrontpageImg} 
+                alt="SpendTrace Spending by Category, Expense Ledger, and Purchase Journey Sequence" 
+                className="frontpage-hero-image" 
+              />
+            </div>
+
+            {/* 4 Interactive Journey Purchase Cards Matching Diagram */}
+            <div style={{ marginBottom: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                    Purchase Journey Sequence ($249.31 Total)
+                  </h3>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                    Each transaction demonstrates SpendTrace's unitemized receipt intelligence, accurate tax extraction, and automated ledger recording.
+                  </p>
+                </div>
+                <button 
+                  className="secondary-btn"
+                  onClick={handleLoadFrontpageBenchmarkTxs}
+                  style={{ fontSize: '12.5px', padding: '6px 14px' }}
+                >
+                  <Database size={13} style={{ marginRight: 5 }} />
+                  Load All 4 to Ledger
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                {MOCK_FRONTPAGE_JOURNEY_ITEMS.map((item) => (
+                  <div 
+                    key={item.step} 
+                    style={{ 
+                      background: '#FFFFFF', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '12px', 
+                      padding: '16px', 
+                      boxShadow: 'var(--shadow-sm)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--google-blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Step {item.step} • {item.date}
+                        </span>
+                        <span 
+                          style={{ 
+                            fontSize: '11px', 
+                            fontWeight: 600, 
+                            padding: '2px 8px', 
+                            borderRadius: '12px', 
+                            color: item.category_color, 
+                            background: `${item.category_color}18`,
+                            border: `1px solid ${item.category_color}30`
+                          }}
+                        >
+                          {item.category}
+                        </span>
+                      </div>
+                      <h4 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
+                        {item.merchant}
+                      </h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px 12px', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '3px' }}>
+                        <span>Subtotal:</span>
+                        <span>${item.subtotal.toFixed(2)}</span>
+                      </div>
+                      {item.tax > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginBottom: '3px' }}>
+                          <span>Tax:</span>
+                          <span>${item.tax.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', borderTop: '1px solid var(--border-subtle)', paddingTop: '4px', marginTop: '4px' }}>
+                        <span>Total:</span>
+                        <span style={{ color: item.category_color }}>${item.amount.toFixed(2)}</span>
+                      </div>
+                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px' }}>
+                        "{item.receipt_tag}"
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Core Capabilities Grid */}
+            <div className="frontpage-features-grid">
+              <div className="frontpage-feature-card">
+                <div className="frontpage-feature-icon">
+                  <Sparkles size={20} />
+                </div>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  Intelligent Retailer Categorization
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                  Even when receipts are unitemized, SpendTrace leverages vendor intelligence to classify transactions accurately (Marshalls → Apparel, Walmart → Grocery, Restaurant → Dining, AT&T → Utilities).
+                </p>
+              </div>
+
+              <div className="frontpage-feature-card">
+                <div className="frontpage-feature-icon" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                  <ShieldAlert size={20} />
+                </div>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  Automated Refund Radar
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                  Tracks physical return vouchers and digital return requests against statement credits. Flags overdue merchant refunds past 10 days and drafts RFC 5322-verified dispute notices in 1 click.
+                </p>
+              </div>
+
+              <div className="frontpage-feature-card">
+                <div className="frontpage-feature-icon" style={{ background: '#E0E7FF', color: '#4F46E5' }}>
+                  <CreditCard size={20} />
+                </div>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  Plaid & Multi-Account Sync
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                  Monitors credit card liabilities, minimum payments, APR rates, and statement balances side-by-side with receipt-grounded itemization to outperform legacy tools like Mint.
+                </p>
+              </div>
+
+              <div className="frontpage-feature-card">
+                <div className="frontpage-feature-icon" style={{ background: '#DCFCE7', color: '#16A34A' }}>
+                  <CheckCircle2 size={20} />
+                </div>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  100% Grounded Audit Trail
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                  Zero hallucinated financial figures. Every line item, tax value, and refund is tied directly to receipt coordinates or bank statement timestamps with verifiable provenance.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab 1: Assistant & Live Ledger */}
         {activeTab === 'assistant' && (
           <div className="split-layout">
@@ -1713,6 +2087,216 @@ export default function App() {
               <button className="export-btn" onClick={fetchRefunds}>
                 <RefreshCw size={14} /> Refresh Radar
               </button>
+            </div>
+
+            {/* Refund Radar Showcase Image Card */}
+            <div className="refund-radar-image-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 14px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldAlert size={18} color="var(--google-blue)" />
+                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+                    Refund Radar — Automated Eligibility & Return Concierge
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span className="status-pill green">
+                    <CheckCircle2 size={13} style={{ marginRight: 4 }} />
+                    4 Purchases Analyzed for Return Windows
+                  </span>
+                </div>
+              </div>
+              <img 
+                src={spendtraceRefundRadarImg} 
+                alt="Refund Radar — Easily start a return or refund for any purchase" 
+                className="refund-radar-hero-image" 
+              />
+            </div>
+
+            {/* Interactive Refund Radar Purchases Table matching Image */}
+            <div style={{ marginBottom: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShieldCheck size={18} color="var(--google-blue)" />
+                    <span>Live Interactive Refund Eligibility Table</span>
+                  </h3>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                    Click <strong>Start Refund &gt;</strong> or <strong>Start Return &gt;</strong> to instantly preview the customized dispute draft with verified vendor support contact records.
+                  </p>
+                </div>
+                <div style={{ background: '#E6F4EA', border: '1px solid #B7E1CD', color: '#137333', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={14} color="#137333" />
+                  <span>We've found 4 recent purchases that may be eligible for a refund</span>
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                <table className="radar-interactive-table" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '13%' }}>Date</th>
+                      <th style={{ width: '18%' }}>Merchant</th>
+                      <th style={{ width: '22%' }}>Item / Description</th>
+                      <th style={{ width: '13%' }}>Amount</th>
+                      <th style={{ width: '14%' }}>Category</th>
+                      <th style={{ width: '20%' }}>Refund Eligibility</th>
+                      <th style={{ width: '14%', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {MOCK_RADAR_ELIGIBLE_PURCHASES.map((p) => (
+                      <tr key={p.id}>
+                        <td style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '13px' }}>
+                          {p.date}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ 
+                              width: 32, 
+                              height: 32, 
+                              borderRadius: '6px', 
+                              background: p.merchant_name === 'Marshalls' ? '#0055A5' : p.merchant_name === 'Walmart' ? '#0071DC' : p.merchant_name === 'AT&T' ? '#00A8E0' : '#D93025',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              letterSpacing: '0.3px',
+                              flexShrink: 0
+                            }}>
+                              {p.merchant_name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>
+                              {p.merchant_name}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>
+                            {p.item_description}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                            {p.item_count_label}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-primary)' }}>
+                            ${p.amount.toFixed(2)}
+                          </span>
+                        </td>
+                        <td>
+                          <span 
+                            style={{ 
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '3px 10px',
+                              borderRadius: '16px',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              background: p.category === 'Outside Food' ? '#FFF4E5' : p.category === 'Apparel' ? '#EBF5FF' : p.category === 'Grocery' ? '#E8F5E9' : '#F3E8FF',
+                              color: p.category === 'Outside Food' ? '#C05621' : p.category === 'Apparel' ? '#1D4ED8' : p.category === 'Grocery' ? '#2E7D32' : '#7E22CE',
+                              border: `1px solid ${p.category === 'Outside Food' ? '#FEEBC8' : p.category === 'Apparel' ? '#BFDBFE' : p.category === 'Grocery' ? '#C8E6C9' : '#E9D5FF'}`
+                            }}
+                          >
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+                            {p.category}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {p.badge_variant === 'green' ? (
+                              <CheckCircle2 size={16} color="var(--google-green)" />
+                            ) : (
+                              <Clock size={16} color="#D97706" />
+                            )}
+                            <div>
+                              <div style={{ 
+                                fontWeight: 600, 
+                                fontSize: '13px', 
+                                color: p.badge_variant === 'green' ? 'var(--google-green)' : '#D97706' 
+                              }}>
+                                {p.eligibility_status}
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                                {p.eligibility_window}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button 
+                            className="refund-action-btn"
+                            onClick={() => handleOpenDisputeModal(p)}
+                            title={`Start dispute/refund for ${p.merchant_name} ($${p.amount.toFixed(2)})`}
+                          >
+                            <span>{p.action_label}</span>
+                            <ChevronRight size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* 3-Step Return Concierge Workflow Footer matching Image */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', padding: '20px 24px', background: '#F8FAFC', borderTop: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E8F0FE', color: 'var(--google-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FileText size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                        1. Find Purchase
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4, marginTop: '2px' }}>
+                        We locate your receipts and check return policies automatically.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E8F0FE', color: 'var(--google-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                        2. Check Eligibility
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4, marginTop: '2px' }}>
+                        See if the item is eligible and the remaining return window.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E8F0FE', color: 'var(--google-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Mail size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                        3. Start Refund
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4, marginTop: '2px' }}>
+                        We guide you through the return or refund process with pre-filled details.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Active Kanban Tracking Board Header */}
+            <div style={{ margin: '20px 0 12px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  Active Return Claims & Settlement Pipeline
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  Tracks physical voucher returns against credit card statement settlements. Flags overdue credits exceeding 10 days.
+                </p>
+              </div>
             </div>
 
             {refunds.length === 0 ? (
@@ -2942,13 +3526,33 @@ export default function App() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '16px' }}>
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '10px', flexWrap: 'wrap' }}>
+                  <button 
+                    style={{ 
+                      background: authTab === 'demo' ? '#E8F0FE' : 'none', 
+                      border: 'none', 
+                      padding: '8px 12px', 
+                      fontSize: '13.5px', 
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderBottom: authTab === 'demo' ? '2px solid var(--google-blue)' : '2px solid transparent',
+                      color: authTab === 'demo' ? 'var(--google-blue)' : 'var(--text-secondary)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      borderRadius: '4px 4px 0 0'
+                    }}
+                    onClick={() => { setAuthTab('demo'); setAuthError(''); setAuthSuccessMessage(''); }}
+                  >
+                    <Star size={14} fill={authTab === 'demo' ? 'var(--google-blue)' : 'none'} />
+                    Demo Admin
+                  </button>
                   <button 
                     style={{ 
                       background: 'none', 
                       border: 'none', 
-                      padding: '8px 0', 
-                      fontSize: '14px', 
+                      padding: '8px 12px', 
+                      fontSize: '13.5px', 
                       fontWeight: 600,
                       cursor: 'pointer',
                       borderBottom: authTab === 'login' ? '2px solid var(--google-blue)' : '2px solid transparent',
@@ -2962,8 +3566,8 @@ export default function App() {
                     style={{ 
                       background: 'none', 
                       border: 'none', 
-                      padding: '8px 0', 
-                      fontSize: '14px', 
+                      padding: '8px 12px', 
+                      fontSize: '13.5px', 
                       fontWeight: 600,
                       cursor: 'pointer',
                       borderBottom: authTab === 'signup' ? '2px solid var(--google-blue)' : '2px solid transparent',
@@ -2971,14 +3575,14 @@ export default function App() {
                     }}
                     onClick={() => { setAuthTab('signup'); setAuthError(''); setAuthSuccessMessage(''); }}
                   >
-                    Create Account
+                    Register
                   </button>
                   <button 
                     style={{ 
                       background: 'none', 
                       border: 'none', 
-                      padding: '8px 0', 
-                      fontSize: '14px', 
+                      padding: '8px 12px', 
+                      fontSize: '13.5px', 
                       fontWeight: 600,
                       cursor: 'pointer',
                       borderBottom: authTab === 'reset' ? '2px solid var(--google-blue)' : '2px solid transparent',
@@ -3003,6 +3607,71 @@ export default function App() {
                   </div>
                 )}
 
+                {authTab === 'demo' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px 0' }}>
+                    <div style={{ background: '#E8F0FE', border: '1px solid #C7D2FE', borderRadius: '10px', padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'var(--google-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Star size={20} color="#FFFFFF" fill="#FFFFFF" />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+                            1-Click Demo Admin Account
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            Pre-configured system administrator (<code>admin@spendtrace.ai</code>)
+                          </div>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '8px 0 12px 0' }}>
+                        Instantly access SpendTrace with administrative privileges. Pre-loaded with the <strong>$249.31</strong> benchmark purchase sequence, active Refund Radar items, Plaid synced accounts, model eval suite, and OpenTelemetry trace logs.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '11.5px', color: '#1E40AF', marginBottom: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={13} color="#2563EB" /> <span>Full Master Ledger ($249.31)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={13} color="#2563EB" /> <span>Refund Radar & Overdue Alerts</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={13} color="#2563EB" /> <span>Plaid Credit Card Liabilities</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={13} color="#2563EB" /> <span>Bypasses MFA Verification</span>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="primary-btn"
+                        onClick={handleDemoAdminLogin}
+                        disabled={authLoading}
+                        style={{ width: '100%', padding: '11px', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      >
+                        <Star size={16} fill="#FFFFFF" />
+                        <span>Enter SpendTrace as Demo Admin</span>
+                      </button>
+                    </div>
+
+                    <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Prefer registering with your personal email? Switch to{' '}
+                      <button 
+                        type="button" 
+                        onClick={() => setAuthTab('signup')}
+                        style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        Register
+                      </button>
+                      {' '}or{' '}
+                      <button 
+                        type="button" 
+                        onClick={() => setAuthTab('login')}
+                        style={{ background: 'none', border: 'none', color: 'var(--google-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        Standard Login
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                 <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {authTab === 'signup' && (
                     <div>
@@ -3173,6 +3842,7 @@ export default function App() {
                     )}
                   </div>
                 </form>
+                )}
               </>
             )}
           </div>
