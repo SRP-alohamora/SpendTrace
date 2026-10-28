@@ -249,4 +249,51 @@ def test_vendor_support_and_dispute_notice_draft():
     assert "Structured Wool Blend Oversized Coat" in draft["body"]
     assert "Regulation Z" in draft["body"]
 
+def test_complete_refund_loop_endpoint():
+    from backend.app import app
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+
+    # Login as demo admin to get auth token
+    login_res = client.post("/api/v1/auth/demo-login")
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Test Complete Loop for Marshalls Apparel
+    marshalls_res = client.post(
+        "/api/v1/refunds/complete-loop",
+        headers=headers,
+        json={
+            "merchant_name": "Marshalls",
+            "amount": 38.69,
+            "item_description": "Apparel",
+            "action_type": "return"
+        }
+    )
+    assert marshalls_res.status_code == 200
+    m_data = marshalls_res.json()
+    assert m_data["status"] == "success"
+    assert "MAR" in m_data["claim_code"]
+    assert m_data["radar_column"] == "awaiting_credit"
+    assert m_data["amount"] == 38.69
+    assert m_data["reconciliation_active"] is True
+
+    # Test Complete Loop for Walmart Groceries
+    walmart_res = client.post(
+        "/api/v1/refunds/complete-loop",
+        headers=headers,
+        json={
+            "merchant_name": "Walmart",
+            "amount": 88.92,
+            "item_description": "Groceries",
+            "action_type": "return"
+        }
+    )
+    assert walmart_res.status_code == 200
+    w_data = walmart_res.json()
+    assert w_data["status"] == "success"
+    assert "WALM" in w_data["claim_code"]
+    assert w_data["amount"] == 88.92
+
 

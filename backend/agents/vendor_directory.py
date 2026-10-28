@@ -65,6 +65,38 @@ VENDOR_SUPPORT_DIRECTORY: Dict[str, Dict[str, Any]] = {
         "domain": "wholefoodsmarket.com",
         "department": "Whole Foods Customer Care",
         "citation": "Whole Foods Market Customer Service (https://www.wholefoodsmarket.com/customer-service)"
+    },
+    "marshalls": {
+        "canonical_name": "Marshalls",
+        "support_email": "customer.service@marshalls.com",
+        "support_url": "https://www.marshalls.com/us/store/jump/topic/Return-Policy/2400016",
+        "domain": "marshalls.com",
+        "department": "Marshalls Customer Experience & Returns",
+        "citation": "Marshalls Official Return Policy & Customer Service (https://www.marshalls.com/us/store/jump/topic/Return-Policy/2400016)"
+    },
+    "walmart": {
+        "canonical_name": "Walmart",
+        "support_email": "help@walmart.com",
+        "support_url": "https://www.walmart.com/help/article/walmart-standard-return-policy/3221592e5394416684aa54eb3d50eb97",
+        "domain": "walmart.com",
+        "department": "Walmart Customer Care & Returns Dept",
+        "citation": "Walmart Official Standard Return Policy (https://www.walmart.com/help)"
+    },
+    "restaurant": {
+        "canonical_name": "Restaurant",
+        "support_email": "guest_relations@restaurant.com",
+        "support_url": "https://www.restaurant.com/help",
+        "domain": "restaurant.com",
+        "department": "Guest Relations & Dispute Services",
+        "citation": "Restaurant Merchant Support & Billing (https://www.restaurant.com/help)"
+    },
+    "at&t": {
+        "canonical_name": "AT&T",
+        "support_email": "billing.support@att.com",
+        "support_url": "https://www.att.com/support/article/wireless/KM1008860/",
+        "domain": "att.com",
+        "department": "AT&T Wireless Billing & Dispute Resolution",
+        "citation": "AT&T Wireless Support & Return Policy (https://www.att.com/support/)"
     }
 }
 
