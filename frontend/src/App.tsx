@@ -37,7 +37,8 @@ import {
   Plus,
   Settings,
   FastForward,
-  Activity
+  Activity,
+  Info
 } from 'lucide-react';
 
 import spendtraceFrontpageImg from './assets/spendtrace_frontpage.jpg';
@@ -91,6 +92,39 @@ import {
 } from './lib/mockService';
 
 const API_BASE = '/api/v1';
+
+const CATEGORY_META: Record<string, { desc: string; icon: any; riskBadge: string; riskColor: 'blue' | 'purple' | 'amber' | 'green' }> = {
+  "Transaction & receipt accuracy": {
+    desc: "OCR line items, sales tax, currency parsing, and duplicate expense detection across receipts and bank feeds.",
+    icon: CreditCard,
+    riskBadge: "High Financial Risk (Real Money)",
+    riskColor: "blue"
+  },
+  "Categorization & insights": {
+    desc: "Merchant classification, dining vs groceries tagging, and spend trends. Soft semantic inference.",
+    icon: Sparkles,
+    riskBadge: "Low Financial Risk",
+    riskColor: "purple"
+  },
+  "Refund eligibility & planning": {
+    desc: "Merchant return policies, dispute window validation, and courteous claim notice generation.",
+    icon: Clock,
+    riskBadge: "Medium Risk (Dispute Filing)",
+    riskColor: "amber"
+  },
+  "Refund tracking & reconciliation": {
+    desc: "Closed-loop bank statement credit matching, multi-step ticket tracking, and master ledger synchronization.",
+    icon: ShieldCheck,
+    riskBadge: "High Financial Risk (Real Money)",
+    riskColor: "green"
+  },
+  "Agent workflow efficiency": {
+    desc: "Token economics, execution latency, zero tool hallucination rate, and execution reliability.",
+    icon: Gauge,
+    riskBadge: "Operational Cost",
+    riskColor: "blue"
+  }
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'radar' | 'plaid' | 'compare' | 'evals' | 'observability'>('home');
@@ -185,6 +219,15 @@ export default function App() {
     });
     return initial;
   });
+  const [scorecardWeights, setScorecardWeights] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    PRACTICAL_SCORECARD_DEFAULT.categories.forEach(c => {
+      initial[c.name] = Math.round(c.weight * 100);
+    });
+    return initial;
+  });
+  const [selectedRiskPreset, setSelectedRiskPreset] = useState<'default' | 'strict_money' | 'equal' | 'custom'>('default');
+  const [showScorecardHelp, setShowScorecardHelp] = useState<boolean>(true);
   const [releaseStatusMsg, setReleaseStatusMsg] = useState<{ passed: boolean; score: number; violations: number; text: string } | null>(null);
   const [evalRunFeedback, setEvalRunFeedback] = useState<string>('');
 
@@ -1654,10 +1697,14 @@ export default function App() {
   };
 
   // Practical Scorecard Calculations & Handlers
+  const totalWeight = Object.values(scorecardWeights).reduce((a, b) => a + b, 0) || 100;
+
   const currentWeightedScore = Number(
     PRACTICAL_SCORECARD_DEFAULT.categories.reduce((acc, cat) => {
       const score = scorecardScores[cat.name] ?? cat.score;
-      return acc + (score * cat.weight);
+      const rawWeight = scorecardWeights[cat.name] ?? Math.round(cat.weight * 100);
+      const normalizedWeight = rawWeight / totalWeight;
+      return acc + (score * normalizedWeight);
     }, 0).toFixed(1)
   );
 
@@ -1666,12 +1713,51 @@ export default function App() {
     setReleaseStatusMsg(null);
   };
 
+  const handleWeightChange = (catName: string, val: number) => {
+    const clamped = Math.max(1, Math.min(80, val));
+    setScorecardWeights(prev => ({ ...prev, [catName]: clamped }));
+    setSelectedRiskPreset('custom');
+    setReleaseStatusMsg(null);
+  };
+
+  const handleApplyPreset = (preset: 'default' | 'strict_money' | 'equal') => {
+    setSelectedRiskPreset(preset);
+    if (preset === 'default') {
+      const w: Record<string, number> = {};
+      PRACTICAL_SCORECARD_DEFAULT.categories.forEach(c => {
+        w[c.name] = Math.round(c.weight * 100);
+      });
+      setScorecardWeights(w);
+    } else if (preset === 'strict_money') {
+      setScorecardWeights({
+        "Transaction & receipt accuracy": 35,
+        "Categorization & insights": 10,
+        "Refund eligibility & planning": 20,
+        "Refund tracking & reconciliation": 30,
+        "Agent workflow efficiency": 5
+      });
+    } else if (preset === 'equal') {
+      setScorecardWeights({
+        "Transaction & receipt accuracy": 20,
+        "Categorization & insights": 20,
+        "Refund eligibility & planning": 20,
+        "Refund tracking & reconciliation": 20,
+        "Agent workflow efficiency": 20
+      });
+    }
+    setReleaseStatusMsg(null);
+  };
+
   const handleResetScores = () => {
     const res: Record<string, number> = {};
+    const w: Record<string, number> = {};
     PRACTICAL_SCORECARD_DEFAULT.categories.forEach(c => {
       res[c.name] = c.score;
+      w[c.name] = Math.round(c.weight * 100);
     });
     setScorecardScores(res);
+    setScorecardWeights(w);
+    setSelectedRiskPreset('default');
     setReleaseStatusMsg(null);
   };
 
@@ -3941,46 +4027,217 @@ export default function App() {
                       SpendSmart / SpendTrace Internal Scorecard
                     </span>
                   </div>
-                  <h2 style={{ fontSize: 20, fontWeight: 700, marginTop: 6, color: 'var(--text-primary)' }}>
-                    Weighted Release Scorecard
+                  <h2 style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    Weighted Release Scorecard &amp; Risk Gateway
                   </h2>
-                  <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2, maxWidth: 640 }}>
-                    Adjust category scores to explore trade-offs. The target is <strong>{PRACTICAL_SCORECARD_DEFAULT.release_target}%</strong> weighted performance with <strong>0 financial invariant violations</strong>.
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, maxWidth: 680, lineHeight: 1.5 }}>
+                    Adjust <strong>Benchmark Accuracy Scores</strong> (how well the model performs) and <strong>Release Importance Weights</strong> (how heavily that category penalizes the release decision). The production target is <strong>{PRACTICAL_SCORECARD_DEFAULT.release_target}%</strong> weighted performance with <strong>0 financial invariant violations</strong>.
                   </p>
                 </div>
 
-                {/* Score Gauge */}
-                <div className="scorecard-gauge-box">
-                  <div className="scorecard-gauge-value" style={{ color: currentWeightedScore >= 95 ? 'var(--google-green)' : 'var(--google-blue)' }}>
-                    {currentWeightedScore}%
+                {/* Score Gauge & Target Box */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div className="scorecard-gauge-box">
+                    <div className="scorecard-gauge-value" style={{ color: currentWeightedScore >= 95 ? 'var(--google-green)' : 'var(--google-blue)' }}>
+                      {currentWeightedScore}%
+                    </div>
+                    <div className="scorecard-gauge-label">Weighted Score</div>
+                    <div className="scorecard-gauge-target">Target: {PRACTICAL_SCORECARD_DEFAULT.release_target}% | Invariants: 0</div>
                   </div>
-                  <div className="scorecard-gauge-label">Weighted Score</div>
-                  <div className="scorecard-gauge-target">Target: {PRACTICAL_SCORECARD_DEFAULT.release_target}% | Invariants: 0</div>
                 </div>
               </div>
 
-              {/* Sliders Grid */}
-              <div className="eval-slider-group" style={{ marginTop: 20 }}>
+              {/* Explainer Box: What do Weights & Scores mean? */}
+              <div className="scorecard-explainer-box">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Info size={16} color="var(--google-blue)" />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      How the Weighted Scorecard Works &amp; Why Money Demands 100% Invariant Compliance
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setShowScorecardHelp(prev => !prev)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--google-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                  >
+                    {showScorecardHelp ? 'Hide Explainer ▲' : 'Show Explainer ▼'}
+                  </button>
+                </div>
+
+                {showScorecardHelp && (
+                  <div className="scorecard-explainer-grid">
+                    <div className="scorecard-explainer-card">
+                      <div className="scorecard-explainer-card-title" style={{ color: 'var(--google-blue)' }}>
+                        <span>📊</span>
+                        <span>Accuracy (% on Slider) vs. Weight (% of Decision)</span>
+                      </div>
+                      <div className="scorecard-explainer-card-body">
+                        <strong>Benchmark Accuracy (%):</strong> The empirical pass rate of the AI agent on test cases (e.g. 97% means 97 out of 100 receipts parsed with zero errors).<br/>
+                        <strong>Release Weight (%):</strong> Organizational risk priority. It controls how much each category affects the final deployment decision (e.g. 25% weight means this category contributes 25 points out of 100 to the score).
+                      </div>
+                    </div>
+
+                    <div className="scorecard-explainer-card">
+                      <div className="scorecard-explainer-card-title" style={{ color: '#137333' }}>
+                        <span>💰</span>
+                        <span>"We Are Talking Real Money Here" — Risk Asymmetry</span>
+                      </div>
+                      <div className="scorecard-explainer-card-body">
+                        Not all errors carry equal consequences. Misclassifying an Olive Garden dinner as "Groceries" is a minor UI inconvenience. But <strong>miscalculating receipt sales tax</strong> or <strong>failing to reconcile a $46.70 refund</strong> corrupts bank statements and loses customer money! That is why financial accuracy carries the highest organizational weights (30%–35%).
+                      </div>
+                    </div>
+
+                    <div className="scorecard-explainer-card">
+                      <div className="scorecard-explainer-card-title" style={{ color: '#b06000' }}>
+                        <span>🛡️</span>
+                        <span>Zero Financial Invariant Violations Rule</span>
+                      </div>
+                      <div className="scorecard-explainer-card-body">
+                        SpendTrace uses a <strong>Dual-Gate Rule</strong>: Even if the weighted average score is 99%, deployment is <strong>strictly blocked</strong> if there is even 1 financial invariant violation (unbalanced arithmetic, unsigned dispute notices, or token leakage). Near 100% precision is non-negotiable for money.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Release Weight Risk Presets Bar */}
+              <div className="scorecard-presets-bar">
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginRight: 4 }}>
+                  Release Weight Risk Presets:
+                </span>
+                <button 
+                  className={`scorecard-preset-pill ${selectedRiskPreset === 'strict_money' ? 'active' : ''}`}
+                  onClick={() => handleApplyPreset('strict_money')}
+                  title="Weighs transaction math and refund reconciliation highest (65% of total decision)"
+                >
+                  🛡️ Strict Financial Risk (Money First)
+                </button>
+                <button 
+                  className={`scorecard-preset-pill ${selectedRiskPreset === 'default' ? 'active' : ''}`}
+                  onClick={() => handleApplyPreset('default')}
+                  title="Default SpendTrace production release weight allocation"
+                >
+                  ⚖️ Balanced Production Default (25/20/25/20/10)
+                </button>
+                <button 
+                  className={`scorecard-preset-pill ${selectedRiskPreset === 'equal' ? 'active' : ''}`}
+                  onClick={() => handleApplyPreset('equal')}
+                  title="Equal 20% weight across all 5 evaluation pillars"
+                >
+                  ⚡ Equal Risk Allocation (20% Each)
+                </button>
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Total Weight: <strong>{totalWeight}%</strong> {totalWeight !== 100 && `(Normalized)`}
+                </span>
+              </div>
+
+              {/* Enhanced Categories Dual-Control Cards */}
+              <div style={{ marginTop: 16 }}>
                 {PRACTICAL_SCORECARD_DEFAULT.categories.map(cat => {
                   const val = scorecardScores[cat.name] ?? cat.score;
+                  const rawWeight = scorecardWeights[cat.name] ?? Math.round(cat.weight * 100);
+                  const normalizedWeight = rawWeight / totalWeight;
+                  const normalizedWeightPct = Math.round(normalizedWeight * 100);
+                  const contribution = (val * normalizedWeight).toFixed(2);
+                  const maxContribution = (100 * normalizedWeight).toFixed(2);
+                  const meta = CATEGORY_META[cat.name] || {
+                    desc: "Evaluation benchmark category for SpendTrace autonomous agents.",
+                    icon: Gauge,
+                    riskBadge: "Evaluation Pillar",
+                    riskColor: "blue"
+                  };
+                  const IconComp = meta.icon;
+
                   return (
-                    <div key={cat.name} className="eval-slider-item">
-                      <div className="eval-slider-header">
-                        <span className="eval-slider-name">{cat.name}</span>
-                        <span className="eval-slider-weight">{Math.round(cat.weight * 100)}% weight</span>
+                    <div key={cat.name} className="scorecard-category-card">
+                      <div className="scorecard-cat-header">
+                        <div>
+                          <div className="scorecard-cat-title">
+                            <IconComp size={16} color="var(--google-blue)" />
+                            <span>{cat.name}</span>
+                            <span className={`status-pill ${meta.riskColor}`} style={{ fontSize: 10.5, marginLeft: 6 }}>
+                              {meta.riskBadge}
+                            </span>
+                          </div>
+                          <div className="scorecard-cat-desc">
+                            {meta.desc}
+                          </div>
+                        </div>
+
+                        {/* Point Contribution Math Badge */}
+                        <div className="scorecard-math-tag">
+                          <span>Contribution:</span>
+                          <strong>{contribution}</strong> / {maxContribution} pts
+                          <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
+                            ({val}% acc × {normalizedWeightPct}% wt)
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-                        <input 
-                          type="range" 
-                          min={60} 
-                          max={100} 
-                          value={val}
-                          onChange={(e) => handleScoreChange(cat.name, Number(e.target.value))}
-                          style={{ flex: 1, accentColor: 'var(--google-blue)', cursor: 'pointer' }}
-                        />
-                        <span style={{ fontWeight: 700, fontSize: 14, minWidth: 42, textAlign: 'right', color: val >= 95 ? 'var(--google-green)' : 'var(--text-primary)' }}>
-                          {val}%
-                        </span>
+
+                      {/* Dual Controls: Accuracy Slider (Left) and Weight Stepper/Slider (Right) */}
+                      <div className="scorecard-dual-controls-row">
+                        {/* Control 1: Benchmark Accuracy Score */}
+                        <div className="scorecard-control-box">
+                          <div className="scorecard-control-header">
+                            <span style={{ color: 'var(--text-primary)' }}>1. Model Benchmark Accuracy</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: val >= 95 ? 'var(--google-green)' : 'var(--google-blue)' }}>
+                              {val}% Accuracy
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                            <input 
+                              type="range" 
+                              min={60} 
+                              max={100} 
+                              value={val}
+                              onChange={(e) => handleScoreChange(cat.name, Number(e.target.value))}
+                              style={{ flex: 1, accentColor: 'var(--google-blue)', cursor: 'pointer' }}
+                              title="Drag to change benchmark accuracy score"
+                            />
+                          </div>
+                          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                            What the AI model scored on the test benchmark (60% – 100%)
+                          </div>
+                        </div>
+
+                        {/* Control 2: Release Gate Importance Weight */}
+                        <div className="scorecard-control-box">
+                          <div className="scorecard-control-header">
+                            <span style={{ color: 'var(--text-primary)' }}>2. Release Gate Importance Weight</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                              {rawWeight}% weight
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <button 
+                              className="scorecard-stepper-btn"
+                              onClick={() => handleWeightChange(cat.name, rawWeight - 5)}
+                              title="Decrease weight by 5%"
+                            >
+                              -
+                            </button>
+                            <input 
+                              type="range" 
+                              min={5} 
+                              max={60} 
+                              step={5}
+                              value={rawWeight}
+                              onChange={(e) => handleWeightChange(cat.name, Number(e.target.value))}
+                              style={{ flex: 1, accentColor: '#10B981', cursor: 'pointer' }}
+                              title="Drag to change importance weight percentage"
+                            />
+                            <button 
+                              className="scorecard-stepper-btn"
+                              onClick={() => handleWeightChange(cat.name, rawWeight + 5)}
+                              title="Increase weight by 5%"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                            Controls how severely errors in this category penalize release readiness
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -3989,12 +4246,12 @@ export default function App() {
 
               {/* Buttons & Release Gate Notice */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button className="primary-btn" onClick={handleTestReleaseReadiness} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Gauge size={14} /> Test Release Readiness
                   </button>
                   <button className="export-btn" onClick={handleResetScores} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <RotateCcw size={14} /> Reset Scores (93.6%)
+                    <RotateCcw size={14} /> Reset Scores &amp; Weights (93.6%)
                   </button>
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.03)', padding: '6px 12px', borderRadius: 6 }}>
