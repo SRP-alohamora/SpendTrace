@@ -33,7 +33,9 @@ import {
   ChevronRight,
   Gauge,
   RotateCcw,
-  CheckCircle
+  CheckCircle,
+  Plus,
+  Settings
 } from 'lucide-react';
 
 import spendtraceFrontpageImg from './assets/spendtrace_frontpage.jpg';
@@ -65,6 +67,10 @@ import {
   mockInferCategory, 
   MOCK_SAMPLE_BILLS, 
   MOCK_PLAID_DATA, 
+  EMPTY_PLAID_DATA,
+  SUPPORTED_CARD_NETWORKS,
+  SUPPORTED_INSTITUTIONS,
+  recalculatePlaidLiabilities,
   MOCK_PLAID_SYNCED_TRANSACTIONS, 
   type CategoryInferenceResult,
   MOCK_FRONTPAGE_JOURNEY_ITEMS,
@@ -176,9 +182,32 @@ export default function App() {
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Plaid & Credit Card Liabilities State
-  const [plaidData, setPlaidData] = useState<any>(MOCK_PLAID_DATA);
+  // For demo account show data; for guest account, start with 0 cards configured
+  const [plaidData, setPlaidData] = useState<any>(() => {
+    return currentUser?.role === 'admin' ? MOCK_PLAID_DATA : EMPTY_PLAID_DATA;
+  });
   const [plaidLoading, setPlaidLoading] = useState(false);
   const [plaidNotification, setPlaidNotification] = useState('');
+
+  // Plaid Setup Modal State (Credit & Debit Card Configuration)
+  const [showPlaidSetupModal, setShowPlaidSetupModal] = useState(false);
+  const [editingPlaidAccount, setEditingPlaidAccount] = useState<any | null>(null);
+  const [plaidCardNetwork, setPlaidCardNetwork] = useState<'visa' | 'mastercard' | 'amex'>('visa');
+  const [plaidCardType, setPlaidCardType] = useState<'credit' | 'depository'>('credit');
+  const [plaidInstitution, setPlaidInstitution] = useState('Chase Bank');
+  const [plaidCardName, setPlaidCardName] = useState('Chase Sapphire Preferred');
+  const [plaidCardOfficialName, setPlaidCardOfficialName] = useState('Chase Sapphire Preferred Visa Signature');
+  const [plaidCardMask, setPlaidCardMask] = useState('4821');
+  const [plaidCardholderName, setPlaidCardholderName] = useState('Shivani Pradhan');
+  const [plaidCurrentBalance, setPlaidCurrentBalance] = useState('1240.00');
+  const [plaidCreditLimit, setPlaidCreditLimit] = useState('10000.00');
+  const [plaidAprPercentage, setPlaidAprPercentage] = useState('21.99');
+  const [plaidBillingCycleDay, setPlaidBillingCycleDay] = useState('15');
+  const [plaidNextDueDate, setPlaidNextDueDate] = useState('2026-11-20');
+  const [plaidMinPaymentDue, setPlaidMinPaymentDue] = useState('35.00');
+  const [plaidSetupError, setPlaidSetupError] = useState('');
+  const [plaidIsVerifying, setPlaidIsVerifying] = useState(false);
+  const [plaidVerifyStep, setPlaidVerifyStep] = useState(0);
 
   // Mint / Credit Karma Playground State
   const [compMerchant, setCompMerchant] = useState('Marshalls');
@@ -189,10 +218,12 @@ export default function App() {
   const getCategoryClass = (cat: string) => {
     const c = (cat || '').toLowerCase();
     if (c.includes('apparel') || c.includes('clothing') || c.includes('fashion')) return 'apparel';
-    if (c.includes('grocer') || c.includes('supermarket')) return 'groceries';
+    if (c.includes('grocer') || c.includes('supermarket') || c.includes('specialty')) return 'groceries';
     if (c.includes('bill') || c.includes('utilit') || c.includes('electric') || c.includes('telecom')) return 'bills';
     if (c.includes('credit card') || c.includes('payment') || c.includes('autopay')) return 'credit-card';
-    if (c.includes('dining') || c.includes('food') || c.includes('restaurant')) return 'dining';
+    if (c.includes('dining') || c.includes('food') || c.includes('restaurant') || c.includes('olive garden')) return 'dining';
+    if (c.includes('sport') || c.includes('fitness')) return 'sports';
+    if (c.includes('home') || c.includes('hardware')) return 'home';
     if (c.includes('electron') || c.includes('tech')) return 'electronics';
     return 'general';
   };
@@ -349,6 +380,157 @@ export default function App() {
     }
   };
 
+  // Open Plaid Card Setup Modal (for editing existing or configuring new card)
+  const handleOpenPlaidSetup = (accountToEdit?: any) => {
+    setPlaidSetupError('');
+    setPlaidIsVerifying(false);
+    setPlaidVerifyStep(0);
+    if (accountToEdit) {
+      setEditingPlaidAccount(accountToEdit);
+      const net = accountToEdit.network || (accountToEdit.official_name?.toLowerCase().includes('mastercard') ? 'mastercard' : accountToEdit.official_name?.toLowerCase().includes('amex') ? 'amex' : 'visa');
+      setPlaidCardNetwork(net);
+      setPlaidCardType(accountToEdit.type || 'credit');
+      setPlaidInstitution(accountToEdit.plaid_institution || (accountToEdit.name?.includes('Chase') ? 'Chase Bank' : accountToEdit.name?.includes('Amex') ? 'American Express' : accountToEdit.name?.includes('Citi') ? 'Citibank' : 'Bank of America'));
+      setPlaidCardName(accountToEdit.name || '');
+      setPlaidCardOfficialName(accountToEdit.official_name || '');
+      setPlaidCardMask(accountToEdit.mask || '');
+      setPlaidCardholderName(accountToEdit.cardholder_name || currentUser?.full_name || 'Cardholder');
+      setPlaidCurrentBalance(accountToEdit.current_balance !== undefined ? String(accountToEdit.current_balance) : '0.00');
+      setPlaidCreditLimit(accountToEdit.credit_limit !== undefined && accountToEdit.credit_limit !== null ? String(accountToEdit.credit_limit) : '10000.00');
+      setPlaidAprPercentage(accountToEdit.apr_percentage !== undefined && accountToEdit.apr_percentage !== null ? String(accountToEdit.apr_percentage) : '21.99');
+      setPlaidBillingCycleDay(accountToEdit.billing_cycle_day !== undefined ? String(accountToEdit.billing_cycle_day) : '15');
+      setPlaidNextDueDate(accountToEdit.next_payment_due_date || '2026-11-20');
+      setPlaidMinPaymentDue(accountToEdit.minimum_payment_due !== undefined && accountToEdit.minimum_payment_due !== null ? String(accountToEdit.minimum_payment_due) : '35.00');
+    } else {
+      setEditingPlaidAccount(null);
+      setPlaidCardNetwork('visa');
+      setPlaidCardType('credit');
+      setPlaidInstitution('Chase Bank');
+      setPlaidCardName('Chase Sapphire Preferred');
+      setPlaidCardOfficialName('Chase Sapphire Preferred Visa Signature');
+      setPlaidCardMask(String(Math.floor(1000 + Math.random() * 9000)));
+      setPlaidCardholderName(currentUser?.full_name || (currentUser?.email?.includes('alex') ? 'Alex Chen' : 'Shivani Pradhan'));
+      setPlaidCurrentBalance('650.00');
+      setPlaidCreditLimit('8000.00');
+      setPlaidAprPercentage('21.49');
+      setPlaidBillingCycleDay('18');
+      setPlaidNextDueDate('2026-11-18');
+      setPlaidMinPaymentDue('25.00');
+    }
+    setShowPlaidSetupModal(true);
+  };
+
+  // Verify and save card with simulated Plaid Instant Auth tokenization
+  const handleVerifyAndSavePlaidCard = () => {
+    // Form validation
+    const cleanMask = (plaidCardMask || '').trim();
+    if (!/^\d{4}$/.test(cleanMask)) {
+      setPlaidSetupError('Please enter a valid 4-digit card mask (e.g. 4821).');
+      return;
+    }
+    if (!plaidCardName.trim()) {
+      setPlaidSetupError('Please enter a card nickname or product name.');
+      return;
+    }
+    if (!plaidCardholderName.trim()) {
+      setPlaidSetupError('Please enter the cardholder name.');
+      return;
+    }
+    const bal = parseFloat(plaidCurrentBalance);
+    if (isNaN(bal) || bal < 0) {
+      setPlaidSetupError('Current balance must be a non-negative number.');
+      return;
+    }
+    if (plaidCardType === 'credit') {
+      const limit = parseFloat(plaidCreditLimit);
+      if (isNaN(limit) || limit <= 0) {
+        setPlaidSetupError('Credit limit must be a positive number.');
+        return;
+      }
+    }
+
+    setPlaidSetupError('');
+    setPlaidIsVerifying(true);
+    setPlaidVerifyStep(1);
+
+    // Multi-step animated verification simulation
+    setTimeout(() => {
+      setPlaidVerifyStep(2);
+      setTimeout(() => {
+        setPlaidVerifyStep(3);
+        setTimeout(() => {
+          setPlaidVerifyStep(4);
+          setTimeout(() => {
+            const currentBalNum = Number(plaidCurrentBalance) || 0;
+            const limitNum = plaidCardType === 'credit' ? (Number(plaidCreditLimit) || 10000) : null;
+            const minDueNum = plaidCardType === 'credit' ? (Number(plaidMinPaymentDue) || 35) : null;
+            const aprNum = plaidCardType === 'credit' ? (Number(plaidAprPercentage) || 21.99) : null;
+            const utilRate = limitNum && limitNum > 0 ? Number(((currentBalNum / limitNum) * 100).toFixed(1)) : null;
+
+            const updatedCard = {
+              account_id: editingPlaidAccount?.account_id || `acc_${plaidCardNetwork}_${cleanMask}_${Date.now()}`,
+              name: plaidCardName.trim(),
+              official_name: plaidCardOfficialName.trim() || `${plaidCardName.trim()} ${plaidCardNetwork.toUpperCase()}`,
+              network: plaidCardNetwork,
+              type: plaidCardType,
+              subtype: plaidCardType === 'credit' ? 'credit card' : 'checking',
+              mask: cleanMask,
+              cardholder_name: plaidCardholderName.trim(),
+              current_balance: currentBalNum,
+              credit_limit: limitNum,
+              utilization_rate_pct: utilRate,
+              minimum_payment_due: minDueNum,
+              next_payment_due_date: plaidCardType === 'credit' ? plaidNextDueDate : null,
+              apr_percentage: aprNum,
+              billing_cycle_day: Number(plaidBillingCycleDay) || 15,
+              plaid_institution: plaidInstitution,
+              is_overdue: false,
+              plaid_verified: true,
+              last_synced: 'Just now'
+            };
+
+            let currentAccounts = Array.isArray(plaidData?.accounts) ? [...plaidData.accounts] : [];
+            if (editingPlaidAccount) {
+              currentAccounts = currentAccounts.map(a => a.account_id === editingPlaidAccount.account_id ? updatedCard : a);
+            } else {
+              currentAccounts.push(updatedCard);
+            }
+
+            const updatedLiabilities = recalculatePlaidLiabilities(currentAccounts);
+            setPlaidData({
+              status: 'connected',
+              institution_name: 'Plaid Multi-Account Sync',
+              accounts: currentAccounts,
+              liabilities_summary: updatedLiabilities
+            });
+
+            setPlaidNotification(`Card ${updatedCard.name} (ending in ${updatedCard.mask}) successfully verified and linked via Plaid!`);
+            setTimeout(() => setPlaidNotification(''), 4500);
+            setPlaidIsVerifying(false);
+            setShowPlaidSetupModal(false);
+          }, 450);
+        }, 400);
+      }, 400);
+    }, 400);
+  };
+
+  // Disconnect a card from Plaid
+  const handleDisconnectPlaidCard = (accountId: string) => {
+    let currentAccounts = Array.isArray(plaidData?.accounts) ? [...plaidData.accounts] : [];
+    const removedCard = currentAccounts.find(a => a.account_id === accountId);
+    currentAccounts = currentAccounts.filter(a => a.account_id !== accountId);
+    const updatedLiabilities = recalculatePlaidLiabilities(currentAccounts);
+    setPlaidData({
+      status: currentAccounts.length > 0 ? 'connected' : 'disconnected',
+      institution_name: currentAccounts.length > 0 ? 'Plaid Multi-Account Sync' : 'No Cards Connected Yet',
+      accounts: currentAccounts,
+      liabilities_summary: updatedLiabilities
+    });
+    setPlaidNotification(`Card ${removedCard?.name || 'Account'} disconnected from Plaid.`);
+    setTimeout(() => setPlaidNotification(''), 3500);
+    setShowPlaidSetupModal(false);
+  };
+
   const handleOpenImportModal = () => {
     setImportSuccessMsg('');
     setShowImportModal(true);
@@ -497,6 +679,7 @@ export default function App() {
       }
       setTransactions([]);
       setRefunds([]);
+      setPlaidData(EMPTY_PLAID_DATA);
       setActiveTab('home');
     } else {
       try {
@@ -518,6 +701,7 @@ export default function App() {
       }
       setTransactions(MOCK_BENCHMARK_TRANSACTIONS);
       setRefunds(MOCK_REFUNDS);
+      setPlaidData(MOCK_PLAID_DATA);
     }
   };
 
@@ -546,6 +730,7 @@ export default function App() {
     } finally {
       setTransactions(MOCK_BENCHMARK_TRANSACTIONS);
       setRefunds(MOCK_REFUNDS);
+      setPlaidData(MOCK_PLAID_DATA);
       setAuthLoading(false);
       setAuthSuccessMessage("Logged in as Demo Admin (admin@spendtrace.ai) • Rich benchmark ledger loaded");
       setTimeout(() => setAuthSuccessMessage(''), 3000);
@@ -558,10 +743,10 @@ export default function App() {
       {
         id: `fp_${Date.now()}_1`,
         date: "2026-10-28",
-        merchant_clean: "Restaurant",
-        merchant_raw: "RESTAURANT - DINNER ($42.80 + TAX $3.90)",
+        merchant_clean: "Olive Garden",
+        merchant_raw: "OLIVE GARDEN - DINNER ($42.80 + TAX $3.90)",
         amount: 46.70,
-        category: "Outside Food",
+        category: "Casual Dining",
         status: "verified",
         is_return: 0,
         has_receipt: true,
@@ -614,7 +799,7 @@ export default function App() {
       ...prev,
       {
         sender: 'agent' as const,
-        text: `Loaded 4 Frontpage Journey transactions totaling **$249.31** into Master Ledger: Restaurant ($46.70 Outside Food), Marshalls ($38.69 Apparel), Walmart ($88.92 Grocery), and AT&T ($75.00 Utility Bills).`,
+        text: `Loaded 4 Frontpage Journey transactions totaling **$249.31** into Master Ledger: Olive Garden ($46.70 Casual Dining), Marshalls ($38.69 Apparel), Walmart ($88.92 Grocery), and AT&T ($75.00 Utility Bills).`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -629,6 +814,7 @@ export default function App() {
     setShowUserDropdown(false);
     setTransactions([]);
     setRefunds([]);
+    setPlaidData(EMPTY_PLAID_DATA);
     setTraces([]);
     setActiveTab('home');
     setMessages(prev => [
@@ -652,6 +838,7 @@ export default function App() {
     } catch (e) {}
     setTransactions([]);
     setRefunds([]);
+    setPlaidData(EMPTY_PLAID_DATA);
     setMessages(prev => [
       ...prev,
       {
@@ -672,9 +859,11 @@ export default function App() {
       });
       fetchLedger();
       fetchRefunds();
+      setPlaidData(MOCK_PLAID_DATA);
     } catch (e) {
       setTransactions(MOCK_BENCHMARK_TRANSACTIONS);
       setRefunds(MOCK_REFUNDS);
+      setPlaidData(MOCK_PLAID_DATA);
     }
   };
 
@@ -1148,6 +1337,7 @@ export default function App() {
         setIsMfaStep(false);
         setTransactions([]);
         setRefunds([]);
+        setPlaidData(EMPTY_PLAID_DATA);
         setActiveTab('home');
         return;
       }
@@ -1160,6 +1350,7 @@ export default function App() {
       setIsMfaStep(false);
       setTransactions([]);
       setRefunds([]);
+      setPlaidData(EMPTY_PLAID_DATA);
       setActiveTab('home');
     } finally {
       setAuthLoading(false);
@@ -2570,27 +2761,28 @@ export default function App() {
               </button>
             </div>
 
-            {/* Refund Radar Showcase Image Card */}
-            <div className="refund-radar-image-card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 14px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Refund Radar Washed-Out Marquee Banner */}
+            <div className="refund-radar-marquee-card">
+              <img 
+                src={spendtraceRefundRadarImg} 
+                alt="Refund Radar Concept Marquee Reference" 
+                className="refund-radar-marquee-img" 
+              />
+              <div className="refund-radar-marquee-overlay">
+                <div className="refund-radar-marquee-title">
                   <ShieldAlert size={18} color="var(--google-blue)" />
-                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-                    Refund Radar — Automated Eligibility & Return Concierge
+                  <span>Refund Radar — Automated Return Eligibility & Concierge</span>
+                  <span className="status-pill blue" style={{ fontSize: '10px', padding: '2px 8px' }}>
+                    Concept Marquee Reference
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span className="status-pill green">
-                    <CheckCircle2 size={13} style={{ marginRight: 4 }} />
-                    4 Purchases Analyzed for Return Windows
+                <div className="refund-radar-marquee-badges">
+                  <span className="status-pill green" style={{ fontSize: '11px' }}>
+                    <CheckCircle2 size={12} style={{ marginRight: 4 }} />
+                    8 Monitored Retailers: Olive Garden, Marshalls, Walmart, AT&T, Dick's Sporting Goods, Trader Joe's, Best Buy, Home Depot
                   </span>
                 </div>
               </div>
-              <img 
-                src={spendtraceRefundRadarImg} 
-                alt="Refund Radar — Easily start a return or refund for any purchase" 
-                className="refund-radar-hero-image" 
-              />
             </div>
 
             {/* Interactive Refund Radar Purchases Table matching Image */}
@@ -2607,7 +2799,7 @@ export default function App() {
                 </div>
                 <div style={{ background: '#E6F4EA', border: '1px solid #B7E1CD', color: '#137333', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <CheckCircle2 size={14} color="#137333" />
-                  <span>We've found 4 recent purchases that may be eligible for a refund</span>
+                  <span>We've found {MOCK_RADAR_ELIGIBLE_PURCHASES.length} recent purchases that may be eligible for a refund</span>
                 </div>
               </div>
 
@@ -2615,109 +2807,140 @@ export default function App() {
                 <table className="radar-interactive-table" style={{ margin: 0 }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '13%' }}>Date</th>
-                      <th style={{ width: '18%' }}>Merchant</th>
-                      <th style={{ width: '22%' }}>Item / Description</th>
-                      <th style={{ width: '13%' }}>Amount</th>
-                      <th style={{ width: '14%' }}>Category</th>
-                      <th style={{ width: '20%' }}>Refund Eligibility</th>
+                      <th style={{ width: '12%' }}>Date</th>
+                      <th style={{ width: '20%' }}>Merchant</th>
+                      <th style={{ width: '23%' }}>Item / Description</th>
+                      <th style={{ width: '12%' }}>Amount</th>
+                      <th style={{ width: '16%' }}>Category</th>
+                      <th style={{ width: '17%' }}>Refund Eligibility</th>
                       <th style={{ width: '14%', textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {MOCK_RADAR_ELIGIBLE_PURCHASES.map((p) => (
-                      <tr key={p.id}>
-                        <td style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '13px' }}>
-                          {p.date}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div style={{ 
-                              width: 32, 
-                              height: 32, 
-                              borderRadius: '6px', 
-                              background: p.merchant_name === 'Marshalls' ? '#0055A5' : p.merchant_name === 'Walmart' ? '#0071DC' : p.merchant_name === 'AT&T' ? '#00A8E0' : '#D93025',
-                              color: '#FFFFFF',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              letterSpacing: '0.3px',
-                              flexShrink: 0
-                            }}>
-                              {p.merchant_name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>
-                              {p.merchant_name}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>
-                            {p.item_description}
-                          </div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                            {p.item_count_label}
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-primary)' }}>
-                            ${p.amount.toFixed(2)}
-                          </span>
-                        </td>
-                        <td>
-                          <span 
-                            style={{ 
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '3px 10px',
-                              borderRadius: '16px',
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              background: p.category === 'Outside Food' ? '#FFF4E5' : p.category === 'Apparel' ? '#EBF5FF' : p.category === 'Grocery' ? '#E8F5E9' : '#F3E8FF',
-                              color: p.category === 'Outside Food' ? '#C05621' : p.category === 'Apparel' ? '#1D4ED8' : p.category === 'Grocery' ? '#2E7D32' : '#7E22CE',
-                              border: `1px solid ${p.category === 'Outside Food' ? '#FEEBC8' : p.category === 'Apparel' ? '#BFDBFE' : p.category === 'Grocery' ? '#C8E6C9' : '#E9D5FF'}`
-                            }}
-                          >
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-                            {p.category}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {p.badge_variant === 'green' ? (
-                              <CheckCircle2 size={16} color="var(--google-green)" />
-                            ) : (
-                              <Clock size={16} color="#D97706" />
-                            )}
-                            <div>
+                    {MOCK_RADAR_ELIGIBLE_PURCHASES.map((p) => {
+                      const getMerchantBg = (mName: string) => {
+                        const m = mName.toLowerCase();
+                        if (m.includes('marshalls')) return '#0055A5';
+                        if (m.includes('walmart')) return '#0071DC';
+                        if (m.includes('olive garden') || m.includes('restaurant')) return '#2D6A4F';
+                        if (m.includes('att') || m.includes('at&t')) return '#00A8E0';
+                        if (m.includes('dick')) return '#004D40';
+                        if (m.includes('trader')) return '#D9381E';
+                        if (m.includes('best buy')) return '#0046BE';
+                        if (m.includes('home depot')) return '#F96302';
+                        return '#4F46E5';
+                      };
+
+                      const getCatPill = (catName: string) => {
+                        const c = catName.toLowerCase();
+                        if (c.includes('apparel')) return { bg: '#EBF5FF', color: '#1D4ED8', border: '#BFDBFE' };
+                        if (c.includes('dining') || c.includes('food')) return { bg: '#FFF4E5', color: '#C05621', border: '#FEEBC8' };
+                        if (c.includes('specialty')) return { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
+                        if (c.includes('grocer')) return { bg: '#E8F5E9', color: '#2E7D32', border: '#C8E6C9' };
+                        if (c.includes('sport')) return { bg: '#E6FFFA', color: '#047481', border: '#B2F5EA' };
+                        if (c.includes('electronic')) return { bg: '#EFF6FF', color: '#2563EB', border: '#DBEAFE' };
+                        if (c.includes('home')) return { bg: '#FFF7ED', color: '#EA580C', border: '#FFEDD5' };
+                        if (c.includes('bill') || c.includes('utilit')) return { bg: '#F3E8FF', color: '#7E22CE', border: '#E9D5FF' };
+                        return { bg: '#F1F3F4', color: '#3C4043', border: '#DADCE0' };
+                      };
+
+                      const catStyle = getCatPill(p.category);
+                      const merchantBg = getMerchantBg(p.merchant_name);
+
+                      return (
+                        <tr key={p.id}>
+                          <td style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '13px' }}>
+                            {p.date}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ 
-                                fontWeight: 600, 
-                                fontSize: '13px', 
-                                color: p.badge_variant === 'green' ? 'var(--google-green)' : '#D97706' 
+                                width: 32, 
+                                height: 32, 
+                                borderRadius: '6px', 
+                                background: merchantBg,
+                                color: '#FFFFFF',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '11px',
+                                letterSpacing: '0.3px',
+                                flexShrink: 0
                               }}>
-                                {p.eligibility_status}
+                                {p.merchant_name.replace(/[^A-Za-z]/g, '').substring(0, 2).toUpperCase()}
                               </div>
-                              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                                {p.eligibility_window}
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>
+                                {p.merchant_name}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>
+                              {p.item_description}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                              {p.item_count_label}
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-primary)' }}>
+                              ${p.amount.toFixed(2)}
+                            </span>
+                          </td>
+                          <td>
+                            <span 
+                              style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '3px 10px',
+                                borderRadius: '16px',
+                                fontSize: '11.5px',
+                                fontWeight: 600,
+                                background: catStyle.bg,
+                                color: catStyle.color,
+                                border: `1px solid ${catStyle.border}`
+                              }}
+                            >
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+                              {p.category}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {p.badge_variant === 'green' ? (
+                                <CheckCircle2 size={16} color="var(--google-green)" />
+                              ) : (
+                                <Clock size={16} color="#D97706" />
+                              )}
+                              <div>
+                                <div style={{ 
+                                  fontWeight: 600, 
+                                  fontSize: '13px', 
+                                  color: p.badge_variant === 'green' ? 'var(--google-green)' : '#D97706' 
+                                }}>
+                                  {p.eligibility_status}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                                  {p.eligibility_window}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button 
-                            className="refund-action-btn"
-                            onClick={() => handleOpenDisputeModal(p)}
-                            title={`Start dispute/refund for ${p.merchant_name} ($${p.amount.toFixed(2)})`}
-                          >
-                            <span>{p.action_label}</span>
-                            <ChevronRight size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button 
+                              className="refund-action-btn"
+                              onClick={() => handleOpenDisputeModal(p)}
+                              title={`Start dispute/refund for ${p.merchant_name} ($${p.amount.toFixed(2)})`}
+                            >
+                              <span>{p.action_label}</span>
+                              <ChevronRight size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -2872,7 +3095,15 @@ export default function App() {
                   Real-time API feeds for bank checking and credit cards. Eliminates Mint and Credit Karma's fatal double-counting flaw by isolating credit card payments from monthly expenses.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button 
+                  className="plaid-add-card-btn"
+                  onClick={() => handleOpenPlaidSetup(null)}
+                  title="Configure and connect a new card via Plaid Link"
+                >
+                  <Plus size={14} />
+                  Add Card via Plaid Link
+                </button>
                 <button 
                   className="plaid-sync-btn"
                   onClick={handlePlaidSync}
@@ -2990,57 +3221,108 @@ export default function App() {
             </div>
 
             {/* Connected Cards & Bank Accounts Grid */}
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--text-secondary)' }}>
-              CONNECTED FINANCIAL INSTITUTIONS & PAYMENT BALANCES
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-secondary)' }}>
+                CONNECTED FINANCIAL INSTITUTIONS & PAYMENT BALANCES
+              </div>
+              <button 
+                className="card-setup-btn"
+                style={{ padding: '6px 14px', fontSize: '12px' }}
+                onClick={() => handleOpenPlaidSetup(null)}
+              >
+                <Plus size={13} />
+                Link New Card
+              </button>
             </div>
-            <div className="cards-list-grid">
-              {plaidData?.accounts?.map((acc: any) => (
-                <div key={acc.account_id} className="connected-card-item">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{acc.name}</div>
-                    <span className={`status-pill ${acc.type === 'credit' ? 'blue' : 'green'}`}>
-                      {acc.subtype?.toUpperCase() || acc.type?.toUpperCase()}
-                    </span>
-                  </div>
 
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                    {acc.official_name} • ending in <strong>{acc.mask}</strong>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {acc.type === 'credit' ? 'CURRENT BALANCE' : 'AVAILABLE CASH'}
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                        ${Number(acc.current_balance).toFixed(2)}
-                      </div>
-                    </div>
-                    {acc.credit_limit && (
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CREDIT LIMIT</div>
-                        <div style={{ fontSize: '14px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
-                          ${Number(acc.credit_limit).toFixed(2)}
+            {(!plaidData?.accounts || plaidData.accounts.length === 0) ? (
+              <div className="plaid-empty-guest-card">
+                <div className="plaid-empty-guest-icon">
+                  <CreditCard size={32} />
+                </div>
+                <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 6px 0', color: 'var(--text-primary)' }}>
+                  No Payment Cards or Bank Feeds Configured Yet
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 520, margin: '0 auto 16px auto', lineHeight: 1.5 }}>
+                  You are viewing SpendTrace as a guest. Experience the real-time Plaid Link onboarding by configuring any major Visa, Mastercard, or American Express credit card or debit card.
+                </p>
+                <button 
+                  className="plaid-add-card-btn"
+                  onClick={() => handleOpenPlaidSetup(null)}
+                  style={{ padding: '8px 18px', fontSize: 13 }}
+                >
+                  <Plus size={15} />
+                  Configure First Card via Plaid Link
+                </button>
+              </div>
+            ) : (
+              <div className="cards-list-grid">
+                {plaidData?.accounts?.map((acc: any) => {
+                  const networkKey = (acc.network || (acc.official_name?.toLowerCase().includes('amex') ? 'amex' : acc.official_name?.toLowerCase().includes('mastercard') ? 'mastercard' : 'visa')).toLowerCase();
+                  return (
+                    <div key={acc.account_id} className="connected-card-item">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className={`plaid-network-badge ${networkKey}`}>
+                            {networkKey.toUpperCase()}
+                          </span>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{acc.name}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className={`status-pill ${acc.type === 'credit' ? 'blue' : 'green'}`}>
+                            {acc.subtype?.toUpperCase() || acc.type?.toUpperCase()}
+                          </span>
+                          <button 
+                            className="card-setup-btn"
+                            onClick={() => handleOpenPlaidSetup(acc)}
+                            title="Configure card parameters, limit, APR, and validation"
+                          >
+                            <Settings size={12} />
+                            Setup
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
 
-                  {acc.type === 'credit' && (
-                    <div style={{ background: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Utilization: <strong>{acc.utilization_rate_pct}%</strong></span>
-                        <span>APR: <strong>{acc.apr_percentage}%</strong></span>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                        {acc.official_name} • ending in <strong>{acc.mask}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
-                        <span>Minimum Due: <strong>${Number(acc.minimum_payment_due).toFixed(2)}</strong></span>
-                        <span>Due: <strong>{acc.next_payment_due_date}</strong></span>
+
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {acc.type === 'credit' ? 'CURRENT BALANCE' : 'AVAILABLE CASH'}
+                          </div>
+                          <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                            ${Number(acc.current_balance).toFixed(2)}
+                          </div>
+                        </div>
+                        {acc.credit_limit && (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CREDIT LIMIT</div>
+                            <div style={{ fontSize: '14px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
+                              ${Number(acc.credit_limit).toFixed(2)}
+                            </div>
+                          </div>
+                        )}
                       </div>
+
+                      {acc.type === 'credit' && (
+                        <div style={{ background: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Utilization: <strong>{acc.utilization_rate_pct}%</strong></span>
+                            <span>APR: <strong>{acc.apr_percentage}%</strong></span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                            <span>Minimum Due: <strong>${Number(acc.minimum_payment_due).toFixed(2)}</strong></span>
+                            <span>Due: <strong>{acc.next_payment_due_date}</strong></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Double Counting Explanation Showcase */}
             <div style={{ 
@@ -5130,6 +5412,432 @@ export default function App() {
                 <CheckCircle2 size={16} />
                 {importLoading ? "Committing Records..." : `Commit ${importPreviewRecords?.length || 0} Records to Ledger`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plaid Link Card Configuration & Verification Modal */}
+      {showPlaidSetupModal && (
+        <div className="plaid-modal-overlay">
+          <div className="plaid-modal-card">
+            {/* Header */}
+            <div className="plaid-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ 
+                  width: 36, 
+                  height: 36, 
+                  borderRadius: 8, 
+                  background: '#E8F0FE', 
+                  color: 'var(--google-blue)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
+                    {editingPlaidAccount ? `Configure Card: ${editingPlaidAccount.name}` : 'Link New Card via Plaid (Credit or Debit)'}
+                  </h3>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Secure OAuth 2.0 tokenization for Visa, Mastercard, and American Express with instant validation.
+                  </div>
+                </div>
+              </div>
+              <button 
+                className="close-btn" 
+                onClick={() => !plaidIsVerifying && setShowPlaidSetupModal(false)}
+                disabled={plaidIsVerifying}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="plaid-modal-body">
+              {/* Card Network Selector */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  1. SELECT PAYMENT CARD NETWORK
+                </label>
+                <div className="plaid-network-grid">
+                  {SUPPORTED_CARD_NETWORKS.map(net => {
+                    const isSelected = plaidCardNetwork === net.id;
+                    return (
+                      <div 
+                        key={net.id}
+                        className={`plaid-network-card ${isSelected ? 'selected' : ''}`}
+                        onClick={() => !plaidIsVerifying && setPlaidCardNetwork(net.id as any)}
+                        style={{ cursor: plaidIsVerifying ? 'not-allowed' : 'pointer' }}
+                      >
+                        <span className={`plaid-network-badge ${net.id}`}>
+                          {net.badge}
+                        </span>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                          {net.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                          Credit & Debit Cards
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Account Type Toggle */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  2. ACCOUNT CLASSIFICATION
+                </label>
+                <div className="plaid-type-pills">
+                  <button 
+                    type="button" 
+                    className={`plaid-type-pill ${plaidCardType === 'credit' ? 'active' : ''}`}
+                    onClick={() => !plaidIsVerifying && setPlaidCardType('credit')}
+                  >
+                    💳 Credit Card (Revolving Debt, APR & Statements)
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`plaid-type-pill ${plaidCardType === 'depository' ? 'active' : ''}`}
+                    onClick={() => !plaidIsVerifying && setPlaidCardType('depository')}
+                  >
+                    🏦 Debit / Checking Card (Available Cash Feed)
+                  </button>
+                </div>
+              </div>
+
+              {/* Institution & Basic Information */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                    Issuing Bank / Institution
+                  </label>
+                  <select 
+                    value={plaidInstitution}
+                    onChange={(e) => {
+                      const selectedInst = e.target.value;
+                      setPlaidInstitution(selectedInst);
+                      const match = SUPPORTED_INSTITUTIONS.find(i => i.name === selectedInst);
+                      if (match && (match.defaultNetwork === 'visa' || match.defaultNetwork === 'mastercard' || match.defaultNetwork === 'amex')) {
+                        setPlaidCardNetwork(match.defaultNetwork as any);
+                      }
+                    }}
+                    disabled={plaidIsVerifying}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-color)',
+                      fontSize: 13,
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    {SUPPORTED_INSTITUTIONS.map(inst => (
+                      <option key={inst.id} value={inst.name}>{inst.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                    Cardholder Name (as shown on card)
+                  </label>
+                  <input 
+                    type="text" 
+                    value={plaidCardholderName}
+                    onChange={(e) => setPlaidCardholderName(e.target.value)}
+                    placeholder="e.g. Shivani Pradhan"
+                    disabled={plaidIsVerifying}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-color)',
+                      fontSize: 13,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Card Nickname and 4-digit Mask */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                    Card Nickname / Product Line
+                  </label>
+                  <input 
+                    type="text" 
+                    value={plaidCardName}
+                    onChange={(e) => setPlaidCardName(e.target.value)}
+                    placeholder="e.g. Chase Sapphire Preferred, Amex Gold"
+                    disabled={plaidIsVerifying}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-color)',
+                      fontSize: 13,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                    Last 4 Digits (Mask)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="text" 
+                      maxLength={4}
+                      value={plaidCardMask}
+                      onChange={(e) => setPlaidCardMask(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="4821"
+                      disabled={plaidIsVerifying}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border-color)',
+                        fontSize: 13,
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: 1.5,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Balances and Credit Terms */}
+              <div style={{ background: 'var(--bg-secondary)', padding: 14, borderRadius: 8, marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                  {plaidCardType === 'credit' ? 'CREDIT LINE BALANCES & STATEMENT TERMS' : 'DEPOSITORY ACCOUNT BALANCES'}
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      {plaidCardType === 'credit' ? 'Current Balance ($)' : 'Available Cash Balance ($)'}
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      value={plaidCurrentBalance}
+                      onChange={(e) => setPlaidCurrentBalance(e.target.value)}
+                      disabled={plaidIsVerifying}
+                      style={{
+                        width: '100%',
+                        padding: '7px 9px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border-color)',
+                        fontSize: 13,
+                        fontFamily: 'var(--font-mono)',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  {plaidCardType === 'credit' && (
+                    <>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                          Credit Limit ($)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="100"
+                          min="100"
+                          value={plaidCreditLimit}
+                          onChange={(e) => setPlaidCreditLimit(e.target.value)}
+                          disabled={plaidIsVerifying}
+                          style={{
+                            width: '100%',
+                            padding: '7px 9px',
+                            borderRadius: 6,
+                            border: '1px solid var(--border-color)',
+                            fontSize: 13,
+                            fontFamily: 'var(--font-mono)',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                          Purchase APR (%)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          min="0"
+                          max="39.99"
+                          value={plaidAprPercentage}
+                          onChange={(e) => setPlaidAprPercentage(e.target.value)}
+                          disabled={plaidIsVerifying}
+                          style={{
+                            width: '100%',
+                            padding: '7px 9px',
+                            borderRadius: 6,
+                            border: '1px solid var(--border-color)',
+                            fontSize: 13,
+                            fontFamily: 'var(--font-mono)',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                          Next Minimum Due ($)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="1"
+                          min="0"
+                          value={plaidMinPaymentDue}
+                          onChange={(e) => setPlaidMinPaymentDue(e.target.value)}
+                          disabled={plaidIsVerifying}
+                          style={{
+                            width: '100%',
+                            padding: '7px 9px',
+                            borderRadius: 6,
+                            border: '1px solid var(--border-color)',
+                            fontSize: 13,
+                            fontFamily: 'var(--font-mono)',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                          Next Payment Due Date
+                        </label>
+                        <input 
+                          type="date" 
+                          value={plaidNextDueDate}
+                          onChange={(e) => setPlaidNextDueDate(e.target.value)}
+                          disabled={plaidIsVerifying}
+                          style={{
+                            width: '100%',
+                            padding: '6px 9px',
+                            borderRadius: 6,
+                            border: '1px solid var(--border-color)',
+                            fontSize: 12.5,
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {plaidSetupError && (
+                <div style={{
+                  padding: '10px 14px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: 6,
+                  color: '#DC2626',
+                  fontSize: 12.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 16
+                }}>
+                  <ShieldAlert size={16} />
+                  <span>{plaidSetupError}</span>
+                </div>
+              )}
+
+              {/* Verification & Validation Progress Box */}
+              {plaidIsVerifying && (
+                <div className="plaid-verify-box">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 600, fontSize: 13, color: '#1A73E8' }}>
+                    <RefreshCw size={14} className="spin-icon" />
+                    Plaid Instant Auth & Liabilities Validation in Progress...
+                  </div>
+                  
+                  <div className={`plaid-verify-step ${plaidVerifyStep > 1 ? 'done' : plaidVerifyStep === 1 ? 'active' : ''}`}>
+                    {plaidVerifyStep > 1 ? <Check size={14} color="#059669" /> : <span style={{ width: 14 }}>•</span>}
+                    1. Exchanging public token with {plaidInstitution} via Plaid OAuth API
+                  </div>
+                  <div className={`plaid-verify-step ${plaidVerifyStep > 2 ? 'done' : plaidVerifyStep === 2 ? 'active' : ''}`}>
+                    {plaidVerifyStep > 2 ? <Check size={14} color="#059669" /> : <span style={{ width: 14 }}>•</span>}
+                    2. Validating cardholder identity ({plaidCardholderName}) and {plaidCardNetwork.toUpperCase()} account mask (••• {plaidCardMask})
+                  </div>
+                  <div className={`plaid-verify-step ${plaidVerifyStep > 3 ? 'done' : plaidVerifyStep === 3 ? 'active' : ''}`}>
+                    {plaidVerifyStep > 3 ? <Check size={14} color="#059669" /> : <span style={{ width: 14 }}>•</span>}
+                    3. Authenticating real-time liabilities feed: APR, statement cycle & minimum payment due
+                  </div>
+                  <div className={`plaid-verify-step ${plaidVerifyStep === 4 ? 'active done' : ''}`}>
+                    {plaidVerifyStep === 4 ? <Check size={14} color="#059669" /> : <span style={{ width: 14 }}>•</span>}
+                    4. Establishing webhook listener for credit card payment double-counting prevention
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: editingPlaidAccount ? 'space-between' : 'flex-end',
+              padding: '14px 20px',
+              borderTop: '1px solid var(--border-color)',
+              background: 'var(--bg-secondary)',
+              gap: 10
+            }}>
+              {editingPlaidAccount && (
+                <button
+                  type="button"
+                  onClick={() => handleDisconnectPlaidCard(editingPlaidAccount.account_id)}
+                  disabled={plaidIsVerifying}
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #FCA5A5',
+                    color: '#DC2626',
+                    padding: '8px 14px',
+                    borderRadius: 6,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Disconnect Card
+                </button>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setShowPlaidSetupModal(false)}
+                  disabled={plaidIsVerifying}
+                  style={{ padding: '8px 16px', fontSize: 13 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleVerifyAndSavePlaidCard}
+                  disabled={plaidIsVerifying}
+                  style={{ padding: '8px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <ShieldCheck size={16} />
+                  {plaidIsVerifying ? "Verifying with Plaid..." : (editingPlaidAccount ? "Save & Verify Changes" : "Verify & Link Card")}
+                </button>
+              </div>
             </div>
           </div>
         </div>

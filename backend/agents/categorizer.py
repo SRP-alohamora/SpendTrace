@@ -101,7 +101,7 @@ RETAILER_TAXONOMY: List[Dict[str, Any]] = [
             r"\bdunkin'?\b", r"\bchipotle\b", r"\bsweetgreen\b", r"\bmcdonald'?s\b",
             r"\bin-n-out\b", r"\bwendy'?s\b", r"\btaco\s*bell\b", r"\bchick-fil-a\b",
             r"\bpanera(\s*bread)?\b", r"\bshake\s*shack\b", r"\bnobu\b",
-            r"\bosteria\b", r"\bdoordash\b", r"\buber\s*eats\b", r"\bgrubhub\b",
+            r"\bolive\s*garden\b", r"\bosteria\b", r"\bdoordash\b", r"\buber\s*eats\b", r"\bgrubhub\b",
             r"\bcaviar\b", r"\brestaurant\b", r"\bcafe\b", r"\bbakery\b", r"\bpizzeria\b"
         ],
         "default_reason": "Dining, coffee shop, or meal delivery establishment."

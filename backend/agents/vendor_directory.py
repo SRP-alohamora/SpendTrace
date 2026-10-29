@@ -83,12 +83,44 @@ VENDOR_SUPPORT_DIRECTORY: Dict[str, Dict[str, Any]] = {
         "citation": "Walmart Official Standard Return Policy (https://www.walmart.com/help)"
     },
     "restaurant": {
-        "canonical_name": "Restaurant",
-        "support_email": "guest_relations@restaurant.com",
-        "support_url": "https://www.restaurant.com/help",
-        "domain": "restaurant.com",
-        "department": "Guest Relations & Dispute Services",
-        "citation": "Restaurant Merchant Support & Billing (https://www.restaurant.com/help)"
+        "canonical_name": "Olive Garden",
+        "support_email": "guest_relations@olivegarden.com",
+        "support_url": "https://www.olivegarden.com/contact-us",
+        "domain": "olivegarden.com",
+        "department": "Olive Garden Guest Relations & Dining Service",
+        "citation": "Olive Garden Official Guest Support (https://www.olivegarden.com/contact-us)"
+    },
+    "olive garden": {
+        "canonical_name": "Olive Garden",
+        "support_email": "guest_relations@olivegarden.com",
+        "support_url": "https://www.olivegarden.com/contact-us",
+        "domain": "olivegarden.com",
+        "department": "Olive Garden Guest Relations & Dining Service",
+        "citation": "Olive Garden Official Guest Support (https://www.olivegarden.com/contact-us)"
+    },
+    "dick's sporting goods": {
+        "canonical_name": "Dick's Sporting Goods",
+        "support_email": "customer.service@dickssportinggoods.com",
+        "support_url": "https://www.dickssportinggoods.com/s/return-policy",
+        "domain": "dickssportinggoods.com",
+        "department": "Dick's Sporting Goods Returns & Customer Service",
+        "citation": "Dick's Sporting Goods 90-Day Return Policy (https://www.dickssportinggoods.com)"
+    },
+    "dicks sporting goods": {
+        "canonical_name": "Dick's Sporting Goods",
+        "support_email": "customer.service@dickssportinggoods.com",
+        "support_url": "https://www.dickssportinggoods.com/s/return-policy",
+        "domain": "dickssportinggoods.com",
+        "department": "Dick's Sporting Goods Returns & Customer Service",
+        "citation": "Dick's Sporting Goods 90-Day Return Policy (https://www.dickssportinggoods.com)"
+    },
+    "home depot": {
+        "canonical_name": "The Home Depot",
+        "support_email": "support@homedepot.com",
+        "support_url": "https://www.homedepot.com/c/Return_Policy",
+        "domain": "homedepot.com",
+        "department": "The Home Depot Customer Care & Returns",
+        "citation": "The Home Depot 90-Day Standard Return Policy (https://www.homedepot.com)"
     },
     "at&t": {
         "canonical_name": "AT&T",

@@ -1606,12 +1606,52 @@ export const VENDOR_SUPPORT_DIRECTORY: Record<string, Omit<VendorSupportInfo, 'e
     source_citation: "Walmart Official Standard Return Policy (https://www.walmart.com/help)"
   },
   "restaurant": {
-    canonical_name: "Restaurant",
-    support_email: "guest_relations@restaurant.com",
-    support_url: "https://www.restaurant.com/help",
-    domain: "restaurant.com",
-    department: "Guest Relations & Dispute Services",
-    source_citation: "Restaurant Merchant Support & Billing (https://www.restaurant.com/help)"
+    canonical_name: "Olive Garden",
+    support_email: "guest_relations@olivegarden.com",
+    support_url: "https://www.olivegarden.com/contact-us",
+    domain: "olivegarden.com",
+    department: "Olive Garden Guest Relations & Dining Service",
+    source_citation: "Olive Garden Official Guest Support (https://www.olivegarden.com/contact-us)"
+  },
+  "olive garden": {
+    canonical_name: "Olive Garden",
+    support_email: "guest_relations@olivegarden.com",
+    support_url: "https://www.olivegarden.com/contact-us",
+    domain: "olivegarden.com",
+    department: "Olive Garden Guest Relations & Dining Service",
+    source_citation: "Olive Garden Official Guest Support (https://www.olivegarden.com/contact-us)"
+  },
+  "dick's sporting goods": {
+    canonical_name: "Dick's Sporting Goods",
+    support_email: "customer.service@dickssportinggoods.com",
+    support_url: "https://www.dickssportinggoods.com/s/return-policy",
+    domain: "dickssportinggoods.com",
+    department: "Dick's Sporting Goods Returns & Customer Service",
+    source_citation: "Dick's Sporting Goods 90-Day Return Policy (https://www.dickssportinggoods.com)"
+  },
+  "dicks sporting goods": {
+    canonical_name: "Dick's Sporting Goods",
+    support_email: "customer.service@dickssportinggoods.com",
+    support_url: "https://www.dickssportinggoods.com/s/return-policy",
+    domain: "dickssportinggoods.com",
+    department: "Dick's Sporting Goods Returns & Customer Service",
+    source_citation: "Dick's Sporting Goods 90-Day Return Policy (https://www.dickssportinggoods.com)"
+  },
+  "best buy": {
+    canonical_name: "Best Buy",
+    support_email: "customer.care@bestbuy.com",
+    support_url: "https://www.bestbuy.com/returns",
+    domain: "bestbuy.com",
+    department: "Best Buy Customer Care & Returns",
+    source_citation: "Best Buy Standard 15-Day Return Policy (https://www.bestbuy.com/returns)"
+  },
+  "home depot": {
+    canonical_name: "The Home Depot",
+    support_email: "support@homedepot.com",
+    support_url: "https://www.homedepot.com/c/Return_Policy",
+    domain: "homedepot.com",
+    department: "The Home Depot Customer Care & Returns",
+    source_citation: "The Home Depot 90-Day Standard Return Policy (https://www.homedepot.com)"
   },
   "at&t": {
     canonical_name: "AT&T",
@@ -1748,24 +1788,68 @@ export function getRetailerProductNextStep(
     };
   }
 
-  if (m.includes('restaurant')) {
+  if (m.includes('olive garden') || m.includes('restaurant')) {
     return {
-      protocol_title: "Restaurant Guest Relations Dining Billing Inquiry",
-      protocol_summary: "Dining purchases and restaurant service fees require direct merchant resolution through Guest Relations. SpendTrace drafts a professional billing discrepancy notice citing the dinner receipt ($42.80 + $3.90 tax).",
+      protocol_title: "Olive Garden Guest Relations Dining Billing Inquiry",
+      protocol_summary: "Dining purchases and Olive Garden Italian Kitchen meal charges require direct merchant resolution through Guest Relations. SpendTrace drafts a professional billing discrepancy notice citing the dinner receipt ($42.80 + $3.90 tax = $46.70).",
       action_type: 'email_dispute',
       action_label: "Start Refund",
-      recommended_channel: "Merchant Guest Relations & Dispute Services",
+      recommended_channel: "Olive Garden Guest Relations & Dispute Services",
       policy_window: "Immediate Merchant Review Window",
-      claim_code: "RST-DISP-39104-ST",
+      claim_code: "OG-DISP-39104-ST",
       has_dropoff: false,
       dropoff_instructions: "Direct digital dispute. Verified receipt itemization and tax breakdown attached.",
       ai_loop_action_label: "Complete loop with AI",
-      ai_loop_description: "AI transmits dining billing inquiry #RST-DISP-39104-ST to Guest Relations, logs $46.70 in Refund Radar, and sets a 5-day credit settlement deadline.",
+      ai_loop_description: "AI transmits dining billing inquiry #OG-DISP-39104-ST to Olive Garden Guest Relations, logs $46.70 in Refund Radar, and sets a 5-day credit settlement deadline.",
       key_points: [
-        "Merchant Guest Relations billing resolution",
+        "Olive Garden Guest Relations billing resolution",
         "Receipt itemized: Dinner $42.80 + Tax $3.90 = $46.70",
         "Demand for prompt card adjustment or refund",
         "Refund Radar alerts if credit unposted after 5 days"
+      ]
+    };
+  }
+
+  if (m.includes('dick') || m.includes('sporting')) {
+    return {
+      protocol_title: "Dick's Sporting Goods 90-Day Equipment & Apparel Return Protocol",
+      protocol_summary: "Dick's Sporting Goods allows returns of athletic gear, running shoes, and sports apparel within 90 days with valid proof of purchase for a 100% full refund to original payment tender.",
+      action_type: 'digital_claim',
+      action_label: "Start Return",
+      recommended_channel: "Dick's Sporting Goods Returns Portal & Retail Desks",
+      policy_window: "Within 90 days of purchase with receipt / ScoreCard",
+      claim_code: "DSG-RET-88412-ST",
+      has_dropoff: true,
+      dropoff_instructions: "Bring shoes/gear with tags and digital receipt barcode to any Dick's Sporting Goods customer service desk or initiate prepaid UPS return shipping label.",
+      ai_loop_action_label: "Complete loop with AI",
+      ai_loop_description: "AI generates Dick's Sporting Goods return claim #DSG-RET-88412-ST, queues prepaid drop-off barcode, logs $89.99 pending credit, and tracks statement posting within 5 days.",
+      key_points: [
+        "90-Day return window for athletic footwear and gear",
+        "Full refund back to original payment method",
+        "Free in-store drop-off or prepaid shipping label",
+        "Automated Refund Radar credit reconciler active"
+      ]
+    };
+  }
+
+  if (m.includes('trader joe') || m.includes('trader')) {
+    return {
+      protocol_title: "Trader Joe's 100% Satisfaction Guarantee Return Protocol",
+      protocol_summary: "Trader Joe's offers an unconditional 100% money-back satisfaction guarantee on all specialty grocery, produce, and packaged food items at any store location with or without receipt.",
+      action_type: 'in_store_voucher',
+      action_label: "Start Return",
+      recommended_channel: "Trader Joe's Neighborhood Store Service Desk",
+      policy_window: "100% Hassle-Free Satisfaction Guarantee (No Expiration)",
+      claim_code: "TJ-RET-41920-ST",
+      has_dropoff: true,
+      dropoff_instructions: "Bring item packaging or mention satisfaction concern to any Trader Joe's crew member for an immediate, hassle-free 100% refund.",
+      ai_loop_action_label: "Complete loop with AI",
+      ai_loop_description: "AI registers Trader Joe's satisfaction guarantee voucher #TJ-RET-41920-ST, logs $42.35 in Refund Radar, and verifies credit reconciliation.",
+      key_points: [
+        "Trader Joe's legendary 100% satisfaction guarantee",
+        "Covers organic specialty groceries, cold brew, and produce",
+        "Immediate full refund to original card or cash tender",
+        "No expiration cutoff date enforced"
       ]
     };
   }
@@ -2263,6 +2347,61 @@ export const MOCK_SAMPLE_BILLS: Array<{
   }
 ];
 
+export const SUPPORTED_CARD_NETWORKS = [
+  { id: 'visa', name: 'Visa', label: 'Visa', color: '#1A1F71', badge: 'VISA' },
+  { id: 'mastercard', name: 'Mastercard', label: 'Mastercard', color: '#EB001B', badge: 'MC' },
+  { id: 'amex', name: 'American Express', label: 'American Express', color: '#006FCF', badge: 'AMEX' }
+];
+
+export const SUPPORTED_INSTITUTIONS = [
+  { id: 'chase', name: 'Chase Bank', defaultNetwork: 'visa' },
+  { id: 'amex', name: 'American Express', defaultNetwork: 'amex' },
+  { id: 'bofa', name: 'Bank of America', defaultNetwork: 'visa' },
+  { id: 'citi', name: 'Citibank', defaultNetwork: 'mastercard' },
+  { id: 'capital_one', name: 'Capital One', defaultNetwork: 'mastercard' },
+  { id: 'wells_fargo', name: 'Wells Fargo', defaultNetwork: 'visa' },
+  { id: 'discover', name: 'Discover Bank', defaultNetwork: 'discover' },
+  { id: 'custom', name: 'Other Financial Institution...', defaultNetwork: 'visa' }
+];
+
+export const EMPTY_PLAID_DATA = {
+  status: 'disconnected',
+  institution_name: 'No Financial Institutions Connected',
+  accounts: [],
+  liabilities_summary: {
+    total_credit_debt: 0.00,
+    total_credit_limit: 0.00,
+    aggregate_utilization_pct: 0.00,
+    total_minimum_payment_due: 0.00,
+    next_due_date: '—',
+    checking_cash_buffer: 0.00
+  }
+};
+
+export function recalculatePlaidLiabilities(accounts: any[]) {
+  const creditAccounts = (accounts || []).filter(a => a.type === 'credit');
+  const totalDebt = creditAccounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const totalLimit = creditAccounts.reduce((sum, a) => sum + (Number(a.credit_limit) || 0), 0);
+  const utilization = totalLimit > 0 ? Number(((totalDebt / totalLimit) * 100).toFixed(1)) : 0;
+  const minDue = creditAccounts.reduce((sum, a) => sum + (Number(a.minimum_payment_due) || 0), 0);
+  const checking = (accounts || []).filter(a => a.type === 'depository').reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  
+  const dueDates = creditAccounts
+    .map(a => a.next_payment_due_date)
+    .filter(Boolean)
+    .sort();
+  const nextDueDate = dueDates.length > 0 ? dueDates[0] : '—';
+
+  return {
+    total_credit_debt: totalDebt,
+    total_credit_limit: totalLimit,
+    aggregate_utilization_pct: utilization,
+    total_minimum_payment_due: minDue,
+    next_due_date: nextDueDate,
+    checking_cash_buffer: checking
+  };
+}
+
 export const MOCK_PLAID_DATA = {
   status: 'connected',
   institution_name: 'Plaid Multi-Account Sync (Chase, Amex, Citi, BofA)',
@@ -2271,6 +2410,7 @@ export const MOCK_PLAID_DATA = {
       account_id: 'acc_chase_sapphire',
       name: 'Chase Sapphire Reserve',
       official_name: 'Chase Sapphire Reserve Visa Infinite',
+      network: 'visa',
       type: 'credit',
       subtype: 'credit card',
       mask: '4821',
@@ -2286,6 +2426,7 @@ export const MOCK_PLAID_DATA = {
       account_id: 'acc_amex_blue',
       name: 'American Express Blue Cash',
       official_name: 'Amex Blue Cash Preferred',
+      network: 'amex',
       type: 'credit',
       subtype: 'credit card',
       mask: '1004',
@@ -2301,6 +2442,7 @@ export const MOCK_PLAID_DATA = {
       account_id: 'acc_citi_double',
       name: 'Citi Double Cash',
       official_name: 'Citi Double Cash Mastercard',
+      network: 'mastercard',
       type: 'credit',
       subtype: 'credit card',
       mask: '9211',
@@ -2316,6 +2458,7 @@ export const MOCK_PLAID_DATA = {
       account_id: 'acc_bofa_chk',
       name: 'Bank of America Advantage Checking',
       official_name: 'BofA Preferred Rewards Checking',
+      network: 'visa',
       type: 'depository',
       subtype: 'checking',
       mask: '3109',
@@ -2401,21 +2544,21 @@ export const MOCK_PLAID_SYNCED_TRANSACTIONS = [
 export const MOCK_FRONTPAGE_JOURNEY_ITEMS = [
   {
     step: 1,
-    merchant: "Restaurant",
-    description: "Dinner",
+    merchant: "Olive Garden",
+    description: "Tour of Italy & Soup/Salad Dinner",
     subtotal: 42.80,
     tax: 3.90,
     amount: 46.70,
-    category: "Outside Food",
+    category: "Casual Dining",
     category_color: "#EA580C",
     icon: "Utensils",
     date: "Oct 28, 2026",
-    receipt_tag: "Thank you!"
+    receipt_tag: "Hospitaliano! Thank you."
   },
   {
     step: 2,
     merchant: "Marshalls",
-    description: "Apparel",
+    description: "Merino Wool Blend Sweater",
     subtotal: 35.99,
     tax: 2.70,
     amount: 38.69,
@@ -2428,11 +2571,11 @@ export const MOCK_FRONTPAGE_JOURNEY_ITEMS = [
   {
     step: 3,
     merchant: "Walmart",
-    description: "Groceries",
+    description: "Groceries & Household Essentials",
     subtotal: 82.14,
     tax: 6.78,
     amount: 88.92,
-    category: "Grocery",
+    category: "Grocery & Household",
     category_color: "#16A34A",
     icon: "ShoppingCart",
     date: "Oct 28, 2026",
@@ -2441,11 +2584,11 @@ export const MOCK_FRONTPAGE_JOURNEY_ITEMS = [
   {
     step: 4,
     merchant: "AT&T",
-    description: "Mobile Service (Phone Bill)",
+    description: "Fiber Internet & Mobile Service",
     subtotal: 75.00,
     tax: 0.00,
     amount: 75.00,
-    category: "Utility Bills",
+    category: "Utility Bills & Telecom",
     category_color: "#9333EA",
     icon: "Wifi",
     date: "Oct 28, 2026",
@@ -2457,13 +2600,13 @@ export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
   {
     id: "radar_row_1",
     date: "Oct 28, 2026",
-    merchant_name: "Restaurant",
-    merchant_clean: "Restaurant",
-    item_description: "Dinner",
-    item_count_label: "1 item",
+    merchant_name: "Olive Garden",
+    merchant_clean: "Olive Garden",
+    item_description: "Tour of Italy & Soup/Salad Dinner",
+    item_count_label: "Dining service (Dinner)",
     amount: 46.70,
     expected_amount: 46.70,
-    category: "Outside Food",
+    category: "Casual Dining",
     category_class: "dining",
     eligibility_status: "Possible",
     eligibility_window: "Check with merchant",
@@ -2476,8 +2619,8 @@ export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
     date: "Oct 28, 2026",
     merchant_name: "Marshalls",
     merchant_clean: "Marshalls",
-    item_description: "Apparel",
-    item_count_label: "1 item",
+    item_description: "Merino Wool Blend Sweater",
+    item_count_label: "1 apparel item",
     amount: 38.69,
     expected_amount: 38.69,
     category: "Apparel",
@@ -2493,14 +2636,14 @@ export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
     date: "Oct 28, 2026",
     merchant_name: "Walmart",
     merchant_clean: "Walmart",
-    item_description: "Groceries",
-    item_count_label: "5 items",
+    item_description: "Groceries & Household Essentials",
+    item_count_label: "5 grocery items",
     amount: 88.92,
     expected_amount: 88.92,
-    category: "Grocery",
+    category: "Grocery & Household",
     category_class: "groceries",
     eligibility_status: "Eligible",
-    eligibility_window: "Within 7 days",
+    eligibility_window: "Within 7 days (Perishables)",
     badge_variant: "green",
     action_label: "Start Return",
     is_return: 1
@@ -2510,16 +2653,84 @@ export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
     date: "Oct 28, 2026",
     merchant_name: "AT&T",
     merchant_clean: "AT&T",
-    item_description: "Mobile Service",
+    item_description: "Fiber Internet & Mobile Service",
     item_count_label: "Monthly Bill",
     amount: 75.00,
     expected_amount: 75.00,
-    category: "Utility Bills",
+    category: "Utility Bills & Telecom",
     category_class: "bills",
     eligibility_status: "Possible",
-    eligibility_window: "Contact AT&T",
+    eligibility_window: "Contact AT&T support",
     badge_variant: "amber",
     action_label: "Start Refund",
+    is_return: 1
+  },
+  {
+    id: "radar_row_5",
+    date: "Oct 27, 2026",
+    merchant_name: "Dick's Sporting Goods",
+    merchant_clean: "Dick's Sporting Goods",
+    item_description: "Nike Air Zoom Pegasus Running Shoes",
+    item_count_label: "1 athletic footwear item",
+    amount: 89.99,
+    expected_amount: 89.99,
+    category: "Sporting Goods & Fitness",
+    category_class: "sports",
+    eligibility_status: "Eligible",
+    eligibility_window: "Within 90 days with receipt",
+    badge_variant: "green",
+    action_label: "Start Return",
+    is_return: 1
+  },
+  {
+    id: "radar_row_6",
+    date: "Oct 26, 2026",
+    merchant_name: "Trader Joe's",
+    merchant_clean: "Trader Joe's",
+    item_description: "Organic Cold Brew, Sourdough & Snacks",
+    item_count_label: "8 grocery items",
+    amount: 42.35,
+    expected_amount: 42.35,
+    category: "Specialty Grocery",
+    category_class: "specialty_grocery",
+    eligibility_status: "Eligible",
+    eligibility_window: "100% Hassle-Free Guarantee",
+    badge_variant: "green",
+    action_label: "Start Return",
+    is_return: 1
+  },
+  {
+    id: "radar_row_7",
+    date: "Oct 25, 2026",
+    merchant_name: "Best Buy",
+    merchant_clean: "Best Buy",
+    item_description: "Sony Wireless Noise Canceling Headphones",
+    item_count_label: "1 electronics item",
+    amount: 149.99,
+    expected_amount: 149.99,
+    category: "Consumer Electronics",
+    category_class: "electronics",
+    eligibility_status: "Eligible",
+    eligibility_window: "Within 15 days standard",
+    badge_variant: "green",
+    action_label: "Start Return",
+    is_return: 1
+  },
+  {
+    id: "radar_row_8",
+    date: "Oct 24, 2026",
+    merchant_name: "The Home Depot",
+    merchant_clean: "The Home Depot",
+    item_description: "Smart Dimmer Switch & LED Lighting Kit",
+    item_count_label: "3 home improvement items",
+    amount: 94.50,
+    expected_amount: 94.50,
+    category: "Home Improvement",
+    category_class: "home",
+    eligibility_status: "Eligible",
+    eligibility_window: "Within 90 days with receipt",
+    badge_variant: "green",
+    action_label: "Start Return",
     is_return: 1
   }
 ];
@@ -2549,10 +2760,10 @@ export const FOUR_CORE_BENCHMARK_TRANSACTIONS = [
   {
     id: "tx_core_01",
     date: "Oct 28, 2026",
-    merchant: "Restaurant",
+    merchant: "Olive Garden",
     amount: 46.70,
-    category: "Outside Food",
-    description: "Dinner with friends"
+    category: "Casual Dining",
+    description: "Tour of Italy & Soup/Salad Dinner"
   },
   {
     id: "tx_core_02",
@@ -2560,7 +2771,7 @@ export const FOUR_CORE_BENCHMARK_TRANSACTIONS = [
     merchant: "Marshalls",
     amount: 38.69,
     category: "Apparel",
-    description: "Apparel clothing item"
+    description: "Merino Wool Blend Sweater"
   },
   {
     id: "tx_core_03",
@@ -2576,7 +2787,7 @@ export const FOUR_CORE_BENCHMARK_TRANSACTIONS = [
     merchant: "AT&T",
     amount: 75.00,
     category: "Utility Bills",
-    description: "Mobile Service recurring bill"
+    description: "Fiber Internet & Mobile Service"
   }
 ];
 
@@ -2590,15 +2801,15 @@ export function getSpendingAnalysisForWindow(count: number, unit: 'weeks' | 'mon
   let additionalTxs: typeof FOUR_CORE_BENCHMARK_TRANSACTIONS = [];
   if (multiplier > 1) {
     additionalTxs = [
-      { id: "tx_hist_01", date: "Oct 21, 2026", merchant: "Trader Joe's", amount: 42.18, category: "Grocery", description: "Weekly produce" },
-      { id: "tx_hist_02", date: "Oct 19, 2026", merchant: "Shell Oil", amount: 35.00, category: "Gas & Fuel", description: "Commute gas" },
-      { id: "tx_hist_03", date: "Oct 15, 2026", merchant: "Sweetgreen", amount: 16.50, category: "Outside Food", description: "Salad lunch" },
-      { id: "tx_hist_04", date: "Oct 10, 2026", merchant: "Amazon", amount: 58.20, category: "Household", description: "Home supplies" }
+      { id: "tx_hist_01", date: "Oct 27, 2026", merchant: "Dick's Sporting Goods", amount: 89.99, category: "Sporting Goods", description: "Running shoes & apparel" },
+      { id: "tx_hist_02", date: "Oct 26, 2026", merchant: "Trader Joe's", amount: 42.35, category: "Specialty Grocery", description: "Organic snacks & cold brew" },
+      { id: "tx_hist_03", date: "Oct 19, 2026", merchant: "Shell Oil", amount: 35.00, category: "Gas & Fuel", description: "Commute gas" },
+      { id: "tx_hist_04", date: "Oct 15, 2026", merchant: "Sweetgreen", amount: 16.50, category: "Casual Dining", description: "Harvest bowl lunch" }
     ];
     if (multiplier >= 3) {
       additionalTxs.push(
-        { id: "tx_hist_05", date: "Sep 28, 2026", merchant: "Con Edison", amount: 112.40, category: "Utility Bills", description: "Electric bill" },
-        { id: "tx_hist_06", date: "Sep 20, 2026", merchant: "Whole Foods", amount: 94.60, category: "Grocery", description: "Organic pantry" }
+        { id: "tx_hist_05", date: "Sep 28, 2026", merchant: "The Home Depot", amount: 94.50, category: "Home Improvement", description: "Smart LED lighting kit" },
+        { id: "tx_hist_06", date: "Sep 20, 2026", merchant: "Best Buy", amount: 149.99, category: "Electronics", description: "Wireless noise canceling earbuds" }
       );
     }
     if (multiplier >= 6) {
