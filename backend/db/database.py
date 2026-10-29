@@ -134,6 +134,44 @@ def init_db(seed_sample_data: bool = True):
     except Exception:
         pass
 
+    # Ensure trace_spans has sender_agent and authorized_by
+    try:
+        conn.execute("ALTER TABLE trace_spans ADD COLUMN sender_agent TEXT;")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE trace_spans ADD COLUMN authorized_by TEXT;")
+        conn.commit()
+    except Exception:
+        pass
+
+    # Ensure refund_audit_logs table exists
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS refund_audit_logs (
+                id TEXT PRIMARY KEY,
+                claim_code TEXT NOT NULL,
+                trace_id TEXT NOT NULL,
+                user_id TEXT,
+                merchant_name TEXT NOT NULL,
+                step_number INTEGER NOT NULL,
+                step_title TEXT NOT NULL,
+                sender_agent TEXT NOT NULL,
+                authorized_by TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                verification_status TEXT NOT NULL,
+                input_contract_json TEXT NOT NULL,
+                output_contract_json TEXT NOT NULL,
+                message_excerpt TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+    except Exception:
+        pass
+
     # Seed Default Users (Admin, Clean New User, Guest)
     seed_users(conn)
 
@@ -371,6 +409,62 @@ def clear_user_data(user_id: str):
     finally:
         conn.close()
 
+def insert_refund_audit_log(
+    claim_code: str,
+    trace_id: str,
+    merchant_name: str,
+    step_number: int,
+    step_title: str,
+    sender_agent: str,
+    authorized_by: str,
+    timestamp: str,
+    channel: str,
+    verification_status: str,
+    input_contract_json: str,
+    output_contract_json: str,
+    message_excerpt: str,
+    user_id: Optional[str] = None
+) -> str:
+    """Persists an auditable refund message exchange with contract and authorization details."""
+    audit_id = f"aud_{uuid.uuid4().hex[:10]}"
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO refund_audit_logs
+               (id, claim_code, trace_id, user_id, merchant_name, step_number, step_title, sender_agent, authorized_by, timestamp, channel, verification_status, input_contract_json, output_contract_json, message_excerpt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (audit_id, claim_code, trace_id, user_id, merchant_name, step_number, step_title,
+             sender_agent, authorized_by, timestamp, channel, verification_status,
+             input_contract_json, output_contract_json, message_excerpt)
+        )
+        conn.commit()
+        return audit_id
+    finally:
+        conn.close()
+
+def get_refund_audit_logs(claim_code: Optional[str] = None, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieves all tracked refund message exchanges for a claim or user."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        if claim_code:
+            cur.execute(
+                "SELECT * FROM refund_audit_logs WHERE claim_code = ? ORDER BY step_number ASC, created_at ASC",
+                (claim_code,)
+            )
+        elif user_id:
+            cur.execute(
+                "SELECT * FROM refund_audit_logs WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,)
+            )
+        else:
+            cur.execute("SELECT * FROM refund_audit_logs ORDER BY created_at DESC LIMIT 100")
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     init_db(seed_sample_data=True)
     print("Database initialized successfully at:", DB_PATH)
+

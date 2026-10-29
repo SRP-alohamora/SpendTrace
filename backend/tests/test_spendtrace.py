@@ -367,5 +367,37 @@ def test_refund_loop_timeline_steps_and_on_demand_advancement():
     assert adv_data2["timeline_steps"][3]["status"] == "completed"
     assert "Reconciled" in adv_data2["status_headline"]
 
+    # 4. Verify auditable message exchanges saved in database
+    audit_res = client.get(f"/api/v1/refunds/audit-logs/{data['claim_code']}", headers=headers)
+    assert audit_res.status_code == 200
+    audit_json = audit_res.json()
+    assert audit_json["status"] == "success"
+    assert audit_json["total_exchanges"] >= 4
+    logs = audit_json["audit_logs"]
+
+    # Verify step 1 audit
+    step1_log = next(log for log in logs if log["step_number"] == 1)
+    assert "SpendTrace Refund Concierge" in step1_log["sender_agent"]
+    assert "Authenticated User" in step1_log["authorized_by"]
+    assert "Olive Garden" in step1_log["input_contract_json"]
+    assert step1_log["trace_id"] is not None
+
+    # Verify step 3 audit (window resolution from merchant)
+    step3_log = next(log for log in logs if log["step_number"] == 3)
+    assert "Olive Garden Guest Relations" in step3_log["sender_agent"]
+    assert "Executive Care Director" in step3_log["authorized_by"]
+    assert "VERIFIED" in step3_log["verification_status"]
+
+    # 5. Verify trace under Observability / Trace & Analyze
+    trace_id = step1_log["trace_id"]
+    trace_res = client.get(f"/api/v1/observability/traces/{trace_id}", headers=headers)
+    assert trace_res.status_code == 200
+    trace_detail = trace_res.json()
+    assert trace_detail["input_type"] == "refund_loop"
+    assert len(trace_detail["spans"]) >= 4
+    span1 = trace_detail["spans"][0]
+    assert "Refund Concierge" in span1["sender_agent"]
+    assert "Authenticated User" in span1["authorized_by"]
+
 
 

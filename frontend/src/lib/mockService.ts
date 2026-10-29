@@ -921,7 +921,183 @@ export const MOCK_EVAL_DATA = {
   }))
 };
 
+export interface RefundAuditRecord {
+  id: string;
+  claim_code: string;
+  trace_id: string;
+  user_id: string;
+  merchant_name: string;
+  step_number: number;
+  step_title: string;
+  sender_agent: string;
+  authorized_by: string;
+  timestamp: string;
+  channel: string;
+  verification_status: string;
+  input_contract_json: string;
+  output_contract_json: string;
+  message_excerpt: string;
+  created_at?: string;
+}
+
 export const MOCK_TRACES = [
+  {
+    id: "tr_refund_olivegarden_74921",
+    user_id: "00000000-0000-0000-0000-000000000001",
+    action_type: "refund_loop",
+    input_type: "refund_loop",
+    status: "SUCCESS",
+    duration_ms: 840,
+    total_tokens: 680,
+    total_cost_usd: 0.00032,
+    estimated_cost_usd: 0.00032,
+    created_at: "2026-10-28T21:12:00Z",
+    summary: "Olive Garden Refund Loop Trace (#OLIV-RET-74921-ST)",
+    user_query: "Dispute & End-to-End Refund Loop for Olive Garden ($46.70 Tour of Italy & Soup/Salad Dinner)",
+    claim_code: "OLIV-RET-74921-ST",
+    merchant_name: "Olive Garden",
+    amount: 46.70,
+    spans: [
+      {
+        id: "sp_og_01",
+        span_id: "sp_og_01",
+        span_name: "Step 1: Complaint Filed & Dispatched to Olive Garden",
+        node_name: "SpendTrace Refund Concierge Agent (v2.4)",
+        step_number: 1,
+        sender_agent: "SpendTrace Refund Concierge Agent (v2.4)",
+        authorized_by: "Customer: Shivani (Authenticated User)",
+        timestamp: "Oct 28, 2026, 09:12 AM PDT",
+        channel: "Encrypted HTTPS API Dispatch & PII Redaction Proxy",
+        verification_status: "VERIFIED_AUDIT",
+        duration_ms: 185,
+        tokens: 160,
+        cost_usd: 0.00007,
+        status: "SUCCESS",
+        tool_name: "dispatch_merchant_dispute_notice",
+        tool_input_json: JSON.stringify({
+          claim_code: "OLIV-RET-74921-ST",
+          merchant_name: "Olive Garden",
+          dispute_amount: 46.70,
+          currency: "USD",
+          order_id: "OG-DINE-82914",
+          line_items: [
+            { item: "Tour of Italy", price: 23.99 },
+            { item: "Soup, Salad & Breadsticks", price: 14.99 },
+            { item: "Beverage (Italian Margarita)", price: 7.72 }
+          ],
+          dispute_reason: "Customer billed incorrectly for duplicate entrée and dissatisfied with order freshness",
+          authorization: {
+            auth_type: "AUTHENTICATED_USER_SIGNATURE",
+            user_id: "00000000-0000-0000-0000-000000000001",
+            user_display_name: "Shivani Pradhan",
+            timestamp: "2026-10-28T16:12:00Z"
+          }
+        }, null, 2),
+        tool_output_json: JSON.stringify({
+          status: "DISPATCHED",
+          merchant_endpoint: "https://api.darden.com/guest-services/v2/disputes",
+          http_status: 202,
+          merchant_tracking_reference: "DARDEN-TKT-991204",
+          response_timestamp: "2026-10-28T16:12:01Z",
+          expected_acknowledgment_sla: "Under 5 minutes"
+        }, null, 2),
+        message_excerpt: "Formal dispute notice and receipt details dispatched to Olive Garden support. Claim reference #OLIV-RET-74921-ST logged."
+      },
+      {
+        id: "sp_og_02",
+        span_id: "sp_og_02",
+        span_name: "Step 2: Confirmation received from Olive Garden on the complaint",
+        node_name: "Olive Garden Automated Ticketing Relay (Darden Direct)",
+        step_number: 2,
+        sender_agent: "Olive Garden Automated Ticketing Relay (Darden Direct)",
+        authorized_by: "Olive Garden Inbound Automated Dispatch System",
+        timestamp: "Oct 28, 2026, 09:14 AM PDT (2 mins later)",
+        channel: "Direct Merchant Webhook & Support Ticketing Gateway",
+        verification_status: "VERIFIED_AUDIT",
+        duration_ms: 120,
+        tokens: 120,
+        cost_usd: 0.00005,
+        status: "SUCCESS",
+        tool_name: "merchant_inbound_acknowledgment",
+        tool_input_json: JSON.stringify({
+          ticket_reference: "OG-74921",
+          inquiry_category: "Dining Billing Dispute",
+          queue_target: "Central Dining Guest Relations",
+          priority: "HIGH"
+        }, null, 2),
+        tool_output_json: JSON.stringify({
+          acknowledgment_status: "QUEUED_FOR_BUSINESS_HOURS",
+          ticket_id: "OG-74921",
+          sla_window: "Next business day morning (8:00 AM - 10:00 AM EST)",
+          assigned_team: "Darden Guest Care Specialist Group"
+        }, null, 2),
+        message_excerpt: "Thank you for contacting Olive Garden. We have received your complaint regarding your dining visit (Ticket #OG-74921). Routed to Central Dining Guest Relations."
+      },
+      {
+        id: "sp_og_03",
+        span_id: "sp_og_03",
+        span_name: "Step 3: Response received from Olive Garden in next business hour window confirming resolution",
+        node_name: "Olive Garden Guest Relations Specialist Agent (Darden Support)",
+        step_number: 3,
+        sender_agent: "Olive Garden Guest Relations Specialist Agent (Darden Support)",
+        authorized_by: "Olive Garden Executive Care Director (Darden Dining)",
+        timestamp: "Oct 29, 2026, 09:15 AM PDT (Next Business Window)",
+        channel: "Direct Guest Relations Email Relay",
+        verification_status: "VERIFIED_AUDIT",
+        duration_ms: 290,
+        tokens: 240,
+        cost_usd: 0.00012,
+        status: "SUCCESS",
+        tool_name: "merchant_courtesy_refund_approval",
+        tool_input_json: JSON.stringify({
+          claim_code: "OLIV-RET-74921-ST",
+          ticket_reference: "OG-74921",
+          investigation_basis: "Billing discrepancy and food satisfaction verified with restaurant general manager",
+          audited_amount: 46.70
+        }, null, 2),
+        tool_output_json: JSON.stringify({
+          resolution_verdict: "COURTESY_REFUND_APPROVED",
+          credit_amount: 46.70,
+          authorization_reference: "OG-REF-3910",
+          tender_destination: "Original Payment Card (Chase Sapphire ending in 4012)",
+          settlement_timeline: "2-3 business days"
+        }, null, 2),
+        message_excerpt: "Dear Guest, thank you for your patience while we reviewed your complaint. Restaurant management investigated the receipt with the local general manager and approved a full courtesy refund of $46.70 back to your original payment card. Transaction ref: OG-REF-3910."
+      },
+      {
+        id: "sp_og_04",
+        span_id: "sp_og_04",
+        span_name: "Step 4: Bank Statement Credit Settlement & Closed Loop",
+        node_name: "SpendTrace Autonomous Reconciler Agent (v2.4)",
+        step_number: 4,
+        sender_agent: "SpendTrace Autonomous Reconciler Agent (v2.4)",
+        authorized_by: "SpendTrace Core Settlement Protocol",
+        timestamp: "Oct 31, 2026, 02:30 PM PDT",
+        channel: "Plaid Core Banking Webhook & Settlement Gateway",
+        verification_status: "VERIFIED_AUDIT",
+        duration_ms: 245,
+        tokens: 160,
+        cost_usd: 0.00008,
+        status: "SUCCESS",
+        tool_name: "reconcile_bank_statement_credit",
+        tool_input_json: JSON.stringify({
+          claim_code: "OLIV-RET-74921-ST",
+          expected_credit_amount: 46.70,
+          account_id: "plaid_chase_sapphire_4012",
+          expected_merchant_pattern: "OLIVE GARDEN*|DARDEN RESTAURANTS"
+        }, null, 2),
+        tool_output_json: JSON.stringify({
+          match_verdict: "EXACT_RECONCILIATION_MATCH",
+          cleared_transaction_id: "tx_plaid_settle_98214",
+          posted_amount: 46.70,
+          clearing_date: "2026-10-31",
+          ledger_reconciled: true,
+          radar_status: "CLOSED_LOOP_RECONCILED"
+        }, null, 2),
+        message_excerpt: "Reconciliation engine confirmed posted bank credit: +$46.70 OLIVE GARDEN #1294 ORLANDO FL. Master ledger updated and refund loop marked fully resolved."
+      }
+    ]
+  },
   {
     id: "tr_11d25991",
     user_id: "00000000-0000-0000-0000-000000000001",

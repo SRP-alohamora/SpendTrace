@@ -168,7 +168,29 @@ CREATE TABLE IF NOT EXISTS trace_spans (
     tool_name TEXT,
     tool_input_json TEXT,
     tool_output_json TEXT,
-    error_log TEXT
+    error_log TEXT,
+    sender_agent TEXT,
+    authorized_by TEXT
+);
+
+-- 11. Refund Loop Message Exchange Audit Logs
+CREATE TABLE IF NOT EXISTS refund_audit_logs (
+    id TEXT PRIMARY KEY,
+    claim_code TEXT NOT NULL,
+    trace_id TEXT NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    merchant_name TEXT NOT NULL,
+    step_number INTEGER NOT NULL,
+    step_title TEXT NOT NULL,
+    sender_agent TEXT NOT NULL,
+    authorized_by TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    verification_status TEXT NOT NULL,
+    input_contract_json TEXT NOT NULL,
+    output_contract_json TEXT NOT NULL,
+    message_excerpt TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for optimal performance
@@ -181,3 +203,6 @@ CREATE INDEX IF NOT EXISTS idx_return_user ON return_reconciliations(user_id);
 CREATE INDEX IF NOT EXISTS idx_return_status ON return_reconciliations(status);
 CREATE INDEX IF NOT EXISTS idx_traces_created ON traces(created_at);
 CREATE INDEX IF NOT EXISTS idx_spans_trace ON trace_spans(trace_id);
+CREATE INDEX IF NOT EXISTS idx_refund_audit_claim ON refund_audit_logs(claim_code);
+CREATE INDEX IF NOT EXISTS idx_refund_audit_trace ON refund_audit_logs(trace_id);
+

@@ -175,7 +175,29 @@ CREATE TABLE IF NOT EXISTS trace_spans (
     tool_name TEXT,
     tool_input_json TEXT,
     tool_output_json TEXT,
-    error_log TEXT
+    error_log TEXT,
+    sender_agent TEXT,
+    authorized_by TEXT
+);
+
+-- 12. Refund Loop Message Exchange Audit Logs (Scoped to user_id)
+CREATE TABLE IF NOT EXISTS refund_audit_logs (
+    id TEXT PRIMARY KEY,
+    claim_code TEXT NOT NULL,
+    trace_id TEXT NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    merchant_name TEXT NOT NULL,
+    step_number INTEGER NOT NULL,
+    step_title TEXT NOT NULL,
+    sender_agent TEXT NOT NULL,
+    authorized_by TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    verification_status TEXT NOT NULL,
+    input_contract_json TEXT NOT NULL,
+    output_contract_json TEXT NOT NULL,
+    message_excerpt TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Performance Indexes
@@ -186,6 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_pg_receipts_user ON receipts(user_id);
 CREATE INDEX IF NOT EXISTS idx_pg_returns_user ON return_reconciliations(user_id);
 CREATE INDEX IF NOT EXISTS idx_pg_traces_user ON traces(user_id);
 CREATE INDEX IF NOT EXISTS idx_pg_spans_trace ON trace_spans(trace_id);
+CREATE INDEX IF NOT EXISTS idx_pg_refund_audit_claim ON refund_audit_logs(claim_code);
+CREATE INDEX IF NOT EXISTS idx_pg_refund_audit_trace ON refund_audit_logs(trace_id);
 
 -- Row Level Security (RLS) Configuration (Supabase IAM standard)
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
@@ -193,3 +217,5 @@ ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE return_reconciliations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clarification_queue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE refund_audit_logs ENABLE ROW LEVEL SECURITY;
+
