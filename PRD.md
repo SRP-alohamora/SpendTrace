@@ -114,15 +114,137 @@ To eliminate manual data entry and financial blind spots by providing an autonom
 - **FR-5.2: Write Action Intercept:** Deletions, manual transaction merges, and duplicate dismissals require explicit user confirmation via LangGraph interrupts.
 - **FR-5.3: Memory of Corrections:** When a user reclassifies a merchant (e.g., *"Shell is always Business Travel, not Personal Fuel"*), the agent updates persistent user classification rules.
 
-### 4.6 Continuous Evaluation & Benchmarking (Evals Tab)
-- **FR-6.1: In-App Eval Suite Execution:** Users or engineers can trigger automated evaluation runs across multiple benchmark categories:
-  - *Receipt OCR Extraction Benchmark:* 20 diverse receipts (clear, faded, multi-item, wrinkled).
-  - *Deduplication & Entity Resolution Benchmark:* 15 challenging pairs (true duplicates vs distinct same-day purchases).
-  - *Refund Reconciliation Benchmark:* 10 return slips tested against matching and non-matching statement credits.
-  - *NL-to-SQL Analytics Benchmark:* 25 natural language financial queries evaluated for SQL correctness, execution safety, and arithmetic exactness.
-- **FR-6.2: Real-Time Eval Progress & Metrics Dashboard:** Displays live test suite execution progress bar, overall Pass/Fail %, Field-level Precision/Recall/F1, P50/P95 latency, and token cost per test.
-- **FR-6.3: Ground-Truth vs Prediction Diff Viewer:** Allows clicking any test case to inspect side-by-side JSON diffs highlighting missing items, incorrect totals, or hallucinated fields.
-- **FR-6.4: Regression Tracking:** Stores historical eval run results in the database to detect accuracy drops across model or prompt updates.
+### 4.6 Continuous Evaluation & Benchmarking Suite (Evals Tab)
+The evaluation system is accessible to all users via the **Evals** tab. It provides deterministic financial assertions, statistical extraction metrics, ledger invariant verification, and Refund Radar specialized rubrics to guarantee that SpendTrace functions as a dependable financial copilot rather than a hallucinating chatbot.
+
+#### 4.6.1 The 15 Core Product Evaluations
+To protect financial ledger integrity and consumer trust, the harness enforces 15 foundational evaluations across extraction, entity resolution, reconciliation, refund reasoning, and security:
+
+| # | Evaluation Criterion | What It Tests | Suggested Target / Metric | MVP Priority |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Receipt extraction** | Extract merchant, date, tax, items and total from photos/PDFs | Critical-field accuracy $\ge 98\%$ | ⭐ **MVP Priority** |
+| **2** | **Transaction categorization** | Classify spending into Grocery, Apparel, Dining, Utilities, etc. | Macro-F1 $\ge 95\%$ | ⭐ **MVP Priority** |
+| **3** | **Merchant normalization** | Recognize `WM SUPERCENTER #1234` as `Walmart` | Accuracy $\ge 98\%$ | Roadmap |
+| **4** | **Duplicate detection** | Avoid double-counting bank feeds, emails and receipts | Precision $\ge 99\%$ | ⭐ **MVP Priority** |
+| **5** | **Receipt-to-payment matching** | Associate a receipt with the correct bank transaction | Match precision $\ge 99\%$ | ⭐ **MVP Priority** |
+| **6** | **Item-level categorization** | Split mixed purchases into multiple spending categories | Item-level F1 $\ge 93\%$ | Roadmap |
+| **7** | **Ledger reconciliation** | Ensure totals, taxes, splits and refunds reconcile | Financial invariant violations = 0 | ⭐ **MVP Priority** |
+| **8** | **Spending insight accuracy** | Produce explanations supported by historical transactions | Unsupported numeric claims = 0 | Roadmap |
+| **9** | **Refund opportunity detection** | Find purchases where return/refund review is warranted | Precision $\ge 95\%$ for actionable alerts | Roadmap |
+| **10** | **Refund eligibility reasoning** | Assess merchant policy, dates and product restrictions | Unsupported eligibility claims = 0 | ⭐ **MVP Priority** |
+| **11** | **Refund workflow planning** | Select the correct refund path and required next steps | Successful plan rate $\ge 95\%$ | Roadmap |
+| **12** | **Refund status tracking** | Identify refund initiated, pending, completed or denied | State accuracy $\ge 99\%$ | Roadmap |
+| **13** | **Refund reconciliation** | Match merchant refund to posted card/bank credit | Match precision $\ge 99\%$ | ⭐ **MVP Priority** |
+| **14** | **User-intent understanding** | Correctly interpret natural-language expense/refund instructions | Task accuracy $\ge 95\%$ | Roadmap |
+| **15** | **Authorization and privacy** | Prevent wrong-account access and unauthorized submissions | Critical violations = 0 | Hard Gate |
+
+> **MVP Priority Focus:** Prioritizing #1, #2, #4, #5, #7, #10, and #13 protects the fundamental reliability of financial data and the credibility of the autonomous refund agent.
+
+#### 4.6.2 Concrete Benchmark Scenarios (E1 – E7)
+The evaluation suite grounds tests against four canonical transactions:
+* **Restaurant:** $46.70 (Expected Category: *Outside Food*)
+* **Marshalls:** $38.69 (Expected Category: *Apparel*)
+* **Walmart:** $88.92 (Expected Category: *Grocery*)
+* **AT&T:** $75.00 (Expected Category: *Utility Bills*)  
+* **Total Net Spend:** **$249.31**
+
+Seven immediate test scenarios validate robustness against real-world failure modes:
+1. **E1. The imperfect receipt:** Upload a tilted Walmart receipt with faint text, multiple products, discounts, taxes, and final total ($88.92).  
+   *Pass Criteria:* Extract correct amounts ($82.14 subtotal, $6.78 tax), avoid inventing unreadable fields, and flag uncertain values for human confirmation.
+2. **E2. The mixed-category Walmart purchase:** An $88.92 basket contains $60.00 groceries and $28.92 clothing.  
+   *Pass Criteria:* Allocate $60.00 to Grocery and $28.92 to Apparel, with no cent lost or double-counted.
+3. **E3. The duplicate receipt:** The user forwards the Marshalls $38.69 receipt by email, uploads a photo of the receipt, and imports the card swipe.  
+   *Pass Criteria:* Produce 1 unified purchase with 3 linked evidence sources, rather than 3 separate expenses.
+4. **E4. The ambiguous instruction:** User: *"That Walmart thing I bought last week, can I get my money back?"*  
+   *Pass Criteria:* Locate plausible transactions and prompt user which item is involved, without assuming everything is returnable.
+5. **E5. Refund eligibility reasoning:** User wants to return a worn Marshalls garment 74 days after purchase (past the 30-day window).  
+   *Pass Criteria:* Consult retailer policy, distinguish refund from merchandise credit or exception requests, and never assert guaranteed eligibility without evidence.
+6. **E6. Partial refund reconciliation:** A $38.69 purchase receives a verified $12.00 statement credit.  
+   *Pass Criteria:* Preserve the original payment, record the linked credit, and show $26.69 net spend without creating a phantom purchase.
+7. **E7. Refund promised but not received:** Merchant confirms a $38.69 refund, but no credit appears in bank feed after 10 days.  
+   *Pass Criteria:* Keep the refund in pending/overdue status and flag it for follow-up rather than reporting $38.69 recovered.
+
+#### 4.6.3 Refund Radar: 5 Specialized Autonomy Evaluations
+Refund Radar moves SpendTrace from recording past spending to actively recovering money:
+* **A. Refund opportunity ranking:** Evaluates whether the agent prioritizes genuinely actionable opportunities over speculative ones across Marshalls apparel (check eligibility), Walmart groceries (do not suggest routine return), and AT&T bill (investigate billing error).  
+  *Metric:* **Precision@3** (number of top 3 surfaced opportunities that are truly actionable).
+* **B. Policy-grounded eligibility:** Evaluates merchant return policies against transaction dates, exclusions, condition, proof of purchase, and tender.  
+  *Metric:* Exact-rule grading for dates/amounts + rubric for nuanced policy interpretation (0 unsupported claims).
+* **C. Refund agent tool selection:** Validates execution of the 5-step tool sequence: (1) Search ledger & receipt $\rightarrow$ (2) Retrieve merchant policy $\rightarrow$ (3) Prepare refund request $\rightarrow$ (4) Request human confirmation $\rightarrow$ (5) Monitor status.  
+  *Metric:* Valid tool-sequence completion rate ($\ge 95\%$).
+* **D. Refund value accounting (Financial State Machine):** Enforces a strict separation of states:
+  * *Potential refund:* $38.69 (Opportunity identified)
+  * *Refund requested:* $38.69 (Merchant request submitted)
+  * *Refund approved:* $38.69 (Merchant approved return)
+  * *Money recovered:* $0.00 (Until bank statement credit is verified)  
+  *Rule:* The financial state machine matters as much as the LLM. A successful refund request is never counted as money recovered.
+* **E. Refund vs. billing dispute (CFPB Adversarial Evaluation):** Differentiates voluntary retailer returns, missing refunds, duplicate charges, and unauthorized transactions. Enforces statutory compliance with Consumer Financial Protection Bureau (CFPB) Regulation Z (§ 1026.13) dispute notice requirements to prevent sending consumers down incorrect legal paths.
+
+#### 4.6.4 Practical Evaluation Scorecard & Mathematical Formulas
+Internal release scorecard weights and diagnostic release gates:
+* **Transaction & receipt accuracy:** 97% observed · **25% weight**
+* **Categorization & insights:** 94% observed · **20% weight**
+* **Refund eligibility & planning:** 89% observed · **25% weight**
+* **Refund tracking & reconciliation:** 96% observed · **20% weight**
+* **Agent workflow efficiency:** 91% observed · **10% weight**
+* **Overall Default Weighted Score:** **93.6%** (Target: **95.0%**)
+
+> **Hard Release Gates:** The weighted aggregate is a diagnostic summary. Critical financial invariant violations (invariant errors = 0) and authorization breaches (violations = 0) independently block release, even with high aggregate scores.
+
+| Metric | Formula | Why It Matters |
+| :--- | :--- | :--- |
+| **Category precision** | $\frac{\text{Correctly predicted instances of cat}}{\text{All predicted instances of cat}}$ | Prevents mislabeled expenses |
+| **Category recall** | $\frac{\text{Correctly predicted instances of cat}}{\text{All true instances of cat}}$ | Measures missed classifications |
+| **Duplicate-detection precision** | $\frac{\text{Correct duplicate flags}}{\text{All duplicate flags}}$ | Avoids incorrectly merging separate real purchases |
+| **Refund opportunity precision** | $\frac{\text{Valid opportunities alerted}}{\text{All opportunities alerted}}$ | Avoids misleading refund suggestions |
+| **Refund opportunity recall** | $\frac{\text{Valid opportunities alerted}}{\text{All known valid opportunities}}$ | Surfaces actionable refunds users miss |
+| **Refund reconciliation accuracy** | $\frac{\text{Correctly reconciled refunds}}{\text{Refunds eligible for reconciliation}}$ | Ensures ledger financial reliability |
+| **Agent task success** | $\frac{\text{Correctly completed tasks}}{\text{Total evaluated tasks}}$ | Measures end-to-end agent workflow execution |
+
+#### 4.6.5 200-Case Evaluation Dataset Breakdown
+The evaluation dataset contains 200 curated, stratified test cases:
+* **Receipt extraction (40 cases):** Faded thermal receipts, taxes, multi-item baskets, discounts.
+* **Categorization (40 cases):** Walmart mixed baskets, Amazon purchases, ambiguous vendor names.
+* **Duplicate detection and reconciliation (30 cases):** Email + bank duplicates, pending vs posted transactions.
+* **Refund eligibility (35 cases):** Return windows, excluded categories, missing receipts.
+* **Agent workflow (30 cases):** Tool failures, policy lookups, human approvals, retries.
+* **Refund settlement (25 cases):** Partial refunds, delayed statement credits, split tenders.
+
+Sample evaluation test schema (`REFUND_001`):
+```json
+{
+  "eval_id": "REFUND_001",
+  "scenario": "Partial clothing return",
+  "input": {
+    "merchant": "Marshalls",
+    "purchase_amount": 38.69,
+    "refund_credit": 12.00,
+    "refund_posted": true
+  },
+  "expected": {
+    "original_purchase": 38.69,
+    "refund_received": 12.00,
+    "net_spend": 26.69,
+    "refund_status": "partially_refunded"
+  },
+  "assertions": [
+    "preserve_original_transaction",
+    "link_refund_to_purchase",
+    "no_double_counting",
+    "correct_net_spend"
+  ]
+}
+```
+
+#### 4.6.6 Long-Term Ambitious Evaluations
+1. **Financial Memory Eval:** Evaluates retention of user-specific classification overrides and exceptions across sessions (e.g., *"Always categorize Sweetgreen as Outside Food, except when I buy bottled drinks for an office event"*).
+2. **Counterfactual Refund Eval:** Evaluates stability of reasoning when exactly one factual premise changes (e.g., purchase made 10 days ago vs 60 days ago under a 30-day policy).
+3. **Autonomous Recovery Eval:** Evaluates graceful recovery when merchant portals fail, links expire, or authentication is required, handing off cleanly to human review instead of fabricating claims.
+
+#### 4.6.7 Recommended MVP Build Order
+1. **First (Foundation):** Receipt extraction, categorization, duplicate detection, and ledger reconciliation. Future-proofed to ingest receipts, CSV statements, Excel spreadsheets (.xlsx, .xls), PDFs, and Plaid API streams.
+2. **Second (Intelligence):** Refund eligibility reasoning and policy grounding.
+3. **Third (Value Capture):** End-to-end refund concierge, status tracking, and settlement reconciliation.
 
 ### 4.7 End-to-End System Observability & Tracing (Observability Tab)
 - **FR-7.1: Live Execution Trace Stream:** Captures and displays every user interaction as a structured trace tree with status (`Success`, `HITL_Paused`, `Failed`, `Retried`).
@@ -207,80 +329,99 @@ SpendTrace adopts a **pure white, sparse, Google-like interface** inspired by th
 
 ### 6.2 Tab Navigation Architecture
 
-The application is structured into **4 sparse, focused tabs**:
+#### 6.2.0 First-Time User Experience (Background Hero Login)
+When an unauthenticated or first-time user visits SpendTrace, the application renders a clean, focused authentication card overlaid on the full-screen background graphic (`spendtrace_frontpage.jpg`). The legacy marketing frontpage is completely removed. Users can sign in or sign up using email/password, or use 1-click quick credentials to access:
+- **Shivani Pradhan (Admin / Demo Account):** Pre-seeded with 4 benchmark transactions ($249.31), 3 active refund radar cases, and real-time ledger items.
+- **Alex Chen (Clean Slate Member):** Pristine zero-data state for testing fresh onboarding and receipt extraction.
+
+Once authenticated, the user is navigated directly to **Home** (Assistant & Live Ledger) by default.
 
 ```
-+------------------------------------------------------------------------------------------------------------------------+
-|  SpendTrace       Assistant & Ledger     Refund Radar     Model Evals ᵃᵈᵐⁱⁿ ᵐᵒᵈᵉ     Observability ᵃᵈᵐⁱⁿ ᵐᵒᵈᵉ   [Admin Mode ▼]|
-|                   ==================                                                                                   |
-+------------------------------------------------------------------------------------------------------------------------+
++---------------------------------------------------------------------------------------------------------------------------------------------------+
+|  SpendTrace       🏠 Home     Refund Radar     Plaid & Cards     Why SpendTrace     Evals     Trace & Analyze ᵘⁿᵈᵉʳ ᶜᵒⁿˢᵗʳᵘᶜᵗⁱᵒⁿ   [Shivani Pradhan ▼]|
+|                   =======                                                                                                                         |
++---------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-#### Top Navigation & IAM Role Selector
-* **User Identity & Role Selector:** Located at the top right of the navigation bar, displays the authenticated user's email, avatar, and active role pill (`Admin Mode` vs `Member (Clean Slate)`). Provides 1-click toggling between the pre-seeded public demonstration account and a pristine clean-slate user account, plus options to clear data or re-seed benchmark data.
-* **Administrative Superscripts:** The tabs **Model Evals** and **Observability & Traces** feature an explicit superscript badge (`admin mode`) indicating restricted operational controls.
+#### Top Navigation & Tab Hierarchy
+* **Tab 1: 🏠 Home (Assistant & Live Ledger):** The primary operational workspace combining natural language financial assistance, live ledger reconciliation, and the dynamic **Spending Analysis & Financial Pulse** widget (1, 2, 3, 4 weeks / months dropdowns) featuring North Star recovery metrics.
+* **Tab 2: Refund Radar:** End-to-end return opportunity detector, policy compliance checker, merchant email generator, and credit reconciliation board.
+* **Tab 3: Plaid & Credit Cards:** Card liabilities, APRs, utilization alerts, and Plaid transaction sync interface.
+* **Tab 4: Why SpendTrace:** Interactive sandbox demonstrating how SpendTrace solves Mint's pain points (deterministic reconciliation, item-level splits, and autonomous money recovery).
+* **Tab 5: Evals (Visible to All Users):** Comprehensive model and agent evaluation benchmark suite featuring the 15 Core Evals, Concrete Scenarios E1–E7, 5 Refund Radar specialized evals, dynamic 93.6% weighted scorecard, and 200-case dataset breakdown.
+* **Tab 6: Trace & Analyze ᵘⁿᵈᵉʳ ᶜᵒⁿˢᵗʳᵘᶜᵗⁱᵒⁿ (Visible to All Users):** Observability and execution telemetry console displaying sub-agent spans, token consumption, latency waterfalls, and node inspection drawers. Flagged with a prominent `Under Construction` banner and superscript badge.
 
-#### 6.2.1 Tab 1: Assistant & Live Ledger (Dual-Pane Sparse Workspace)
+#### 6.2.1 Tab 1: 🏠 Home (Dual-Pane Sparse Workspace & Spending Analysis)
+* **Top Spending Analysis & Financial Pulse Widget:**
+  - Configurable time window: Count selector (`1`, `2`, `3`, `4`) and Unit selector (`Weeks`, `Months`).
+  - Defaults to **Last 1 Week**, benchmarked against 4 core purchases:
+    - *Restaurant:* $46.70 (Outside Food)
+    - *Marshalls:* $38.69 (Apparel)
+    - *Walmart:* $88.92 (Grocery)
+    - *AT&T:* $75.00 (Utility Bills)
+    - **Total Spend:** $249.31
+  - Displays the 3 North Star Product Metrics cards:
+    - *Verified Refund Dollars Recovered / MAU:* $42.50 / user
+    - *User Effort per Successful Refund:* 1-Click Loop Closure
+    - *False Refund Opportunity Rate:* 0.0% (High-precision guardrails)
 * **Left Pane (40% width): Conversational Agent Console**
   - Clean white thread timeline with subtle message bubbles (User: `#F1F3F4`, Agent: transparent with `#1A73E8` icon).
-  - Minimalist dashed dropzone (`border: 1.5px dashed #DADCE0`, `border-radius: 12px`, `#FAFAFA` bg) for receipt images and bank CSV files.
-  - Interactive HITL Clarification Cards with crisp `#DADCE0` borders and clean Google-style action buttons (`#1A73E8` primary, `#5F6368` outline).
+  - Minimalist dashed dropzone (`border: 1.5px dashed #DADCE0`, `border-radius: 12px`, `#FAFAFA` bg) for receipt images, bank CSVs, and Excel files.
+  - Interactive HITL Clarification Cards with crisp `#DADCE0` borders and clean action buttons.
 * **Right Pane (60% width): Live Ledger & Receipt Inspector**
-  - Clean statistical summary chips: `Total Spend: $1,420.50`, `Pending Refunds: 1 ($89.00)`, `Requires Review: 1`.
+  - Summary metrics: Total Spend, Net Spend, Verified Transactions, Pending Refunds.
   - Searchable, filterable transaction table with Google-style pill badges (`Verified`, `Needs Review`, `Duplicate`).
-  - Slide-over side-by-side receipt image viewer with clean bounding box highlights and extracted item cards.
-  - **Clean Slate Hero Card:** When a new user logs in (0 transactions), a Google-style welcoming empty state card prompts them to upload their first receipt or CSV statement, or try conversational expense logging.
+  - Slide-over side-by-side receipt image viewer with bounding box highlights and extracted item cards.
+  - Clean-slate hero card when 0 transactions exist.
 
 #### 6.2.2 Tab 2: Refund Radar (Return & Refund Tracker)
 * Sparse, kanban-style lifecycle columns on a clean white canvas:
-  `1. Returns Logged` $\rightarrow$ `2. Awaiting Card Credit` $\rightarrow$ `3. Reconciled` $\rightarrow$ `4. Overdue (>10 Days)`.
-* Overdue items highlighted with a soft red pill (`#FCE8E6` bg, `#D93025` text) and a 1-click action to generate a merchant inquiry note.
+  `1. Opportunities Identified` $\rightarrow$ `2. Return Prepared / Drafted` $\rightarrow$ `3. Awaiting Bank Credit` $\rightarrow$ `4. Reconciled / Recovered` $\rightarrow$ `5. Overdue (>10 Days)`.
+* Merchant policy grounding (e.g., Marshalls 30-day apparel window vs Walmart perishable exclusions).
+* Automated email dispute drafting with human-in-the-loop review and 1-click "Complete Loop with AI".
 
-#### 6.2.3 Tab 3: Model Evals & Quality Suite ᵃᵈᵐⁱⁿ ᵐᵒᵈᵉ
-* Superscript badge: `'admin mode'` in navigation and header.
-* **IAM Admin Barrier:** When viewed by a standard member account, renders a clean Google-style access barrier explaining that model evaluations consume inference credits, offering a 1-click elevation button to switch to Admin Mode.
-* Clean scorecards with thin `#DADCE0` borders displaying accuracy %, P95 latency, and test cost.
-* Sparse test case matrix with green/red status pills (`PASS` / `FAIL`).
-* Side-by-side ground truth vs predicted JSON diff viewer with subtle green/red text highlights.
+#### 6.2.3 Tab 5: Evals (Thoughtful Continuous Benchmark Suite)
+* Visible to all authenticated users without IAM admin barriers.
+* Dynamic release scorecard (93.6% default score, 95% release target, 5 weighted categories with interactive sliders, 0 invariant violation hard release gate).
+* 15 Core Product Evals with target metrics, current scores, and MVP priorities (#1, #2, #4, #5, #7, #10, #13).
+* 7 Concrete Benchmark Scenarios (E1–E7) with 4-purchase baseline ($249.31), ground truth outputs, and automated deterministic assertions.
+* 5 Refund Radar specialized evals (Opportunity Ranking with Precision@3, Policy Grounding, Tool Selection, Financial State Machine Accounting, CFPB Dispute Differentiation).
+* Curated 200-case evaluation dataset breakdown and `REFUND_001` test record schema.
+* 3 Long-Term Ambitious Evals (Financial Memory, Counterfactual Reasoning, Autonomous Recovery).
 
-#### 6.2.4 Tab 4: Agent Observability & Traces ᵃᵈᵐⁱⁿ ᵐᵒᵈᵉ
-* Superscript badge: `'admin mode'` in navigation and header.
-* **IAM Admin Barrier:** Non-admin accounts see an access guard with elevation toggle.
-* Clean trace timeline showing user interactions, latency (ms), token counts, and cost ($).
-* Waterfall Gantt charts and deep span inspectors detailing prompts, responses, tool calls, and exact token costs.
-* Clean horizontal waterfall Gantt chart displaying sub-agent spans in Google Blue (`#1A73E8`).
-* Node inspector drawer exposing exact prompts, model outputs, and tool logs in clean monospace code blocks on `#F8F9FA`.
-  - Status Pills (`PASS` / `FAIL`), Test Category, Execution Time, Token Cost.
-  - **Ground Truth vs Predicted Inspector:** Visual side-by-side JSON diff highlighting any extraction discrepancy.
-  - **Regression History Chart:** Line graph showing accuracy trends across last 10 test suite runs.
-
-### 6.4 Tab 4: Agent Observability & Traces
-* **Live Trace Feed:** Filterable stream of all agent invocations (Chat, Receipt Upload, CSV Ingest, Analytical Query).
-* **Waterfall Gantt Chart:** Visual execution timeline displaying sequential and parallel sub-agent spans.
-* **Deep Span Inspector Drawer:**
-  - Displays: `Node Name`, `Execution Latency (ms)`, `Tokens In/Out`, `Calculated Cost ($)`.
-  - Raw JSON input state passed into the node.
-  - System and User prompts formatted with markdown highlighting.
-  - Raw LLM/tool output and sanitized state mutations.
+#### 6.2.4 Tab 6: Trace & Analyze ᵘⁿᵈᵉʳ ᶜᵒⁿˢᵗʳᵘᶜᵗⁱᵒⁿ
+* Visible to all users with `<sup>Under Construction</sup>` superscript badge and header disclaimer banner.
+* Live trace stream of all agent invocations (Chat, Receipt Extraction, SQL Analytics, Refund Workflow).
+* Horizontal waterfall Gantt chart displaying sub-agent spans in Google Blue (`#1A73E8`).
+* Node inspector drawer exposing exact prompts, model outputs, tool logs, latency (ms), and token costs.
 
 ---
 
 ## 7. Success Metrics & Acceptance Criteria
 
+### 7.1 North Star Product Metrics
+| Metric | Target | Measurement Method | Rationale |
+| :--- | :--- | :--- | :--- |
+| **Verified Refund Dollars Recovered per MAU** | **$\ge \$42.50$ / MAU** | Sum of ledger credits reconciled against merchant return receipts divided by active users in 30-day window. | Primary value driver distinguishing SpendTrace from passive expense recorders. |
+| **User Effort per Successful Refund** | **1-Click Loop Closure** | Median user interactions from refund detection to settlement (one-click approval). | Measures convenience and frictionless autonomous resolution. |
+| **False Refund Opportunity Rate** | **$0.0\%$** | Number of invalid/ineligible refund suggestions divided by total suggested opportunities (Precision $\ge 95\%$). | Protects user trust by preventing fruitless merchant disputes. |
+
+### 7.2 Technical & Operational Acceptance Criteria
 | Metric | Target | Measurement Method |
 | :--- | :--- | :--- |
-| **End-to-End Extraction Accuracy** | $\ge 92\%$ | Evaluated automatically via in-app Evals Tab benchmark against 50 diverse receipt test cases. |
-| **Deduplication Precision** | $\ge 95\%$ | Synthetic injection of duplicate statement transactions and overlapping receipts. |
-| **Orphan Return Detection Recall** | $100\%$ | Return slips with no matching credit after 10 days flagged without omission. |
-| **SQL Execution Safety & Determinism** | $100\%$ | 0 write queries permitted; 100% of arithmetic calculations executed via SQL aggregate functions. |
-| **Observability Trace Coverage** | $100\%$ | Every multi-agent execution generates a complete, inspectable span tree in the Observability Tab. |
+| **Critical Field Extraction Accuracy** | $\ge 98\%$ | Evaluated via Evals Tab on 40 receipt benchmark cases (merchant, date, total, tax). |
+| **Transaction Categorization Macro-F1** | $\ge 95\%$ | Category prediction across Grocery, Apparel, Dining, Utilities on standard datasets. |
+| **Deduplication Precision** | $\ge 99\%$ | Detection of overlapping email receipts, bank charges, and scanned slips. |
+| **Financial Ledger Invariant Violations** | **0 Violations** | Hard release gate: sum of items + tax + tip must equal total; net spend = purchase - refund. |
+| **SQL Execution Determinism** | $100\%$ | 0 write queries permitted in NL-to-SQL mode; all calculations executed via SQLite/PostgreSQL aggregate functions. |
+| **Observability Trace Coverage** | $100\%$ | Every multi-agent invocation generates an inspectable span tree in Trace & Analyze. |
 | **Zero-Correction Rate** | $\ge 85\%$ | Transactions committed without requiring user manual override. |
 
 ---
 
 ## 8. Out of Scope (Future Roadmap)
 
-- Direct OAuth Bank Connection (Plaid / Teller API integration) — Phase 2.
+- Direct OAuth Bank Connection (Plaid / Teller API integration) — Phase 2 (Plaid sandbox interface live in Tab 3).
 - Direct Email Inbox Scraper (IMAP / Gmail API token integration) — Phase 2.
 - Multi-currency automatic Forex hedging.
 - Automated merchant chargeback filing.

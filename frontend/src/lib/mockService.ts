@@ -165,93 +165,760 @@ export const MOCK_REFUNDS = [
   }
 ];
 
+export interface CoreEvalItem {
+  id: number;
+  name: string;
+  what_it_tests: string;
+  suggested_metric_target: string;
+  mvp_priority: boolean;
+  category: 'Extraction' | 'Categorization' | 'Entity Resolution' | 'Reconciliation' | 'Refund Intelligence' | 'Reasoning & Planning' | 'Security & Privacy';
+  current_metric: string;
+  status: 'PASS' | 'FAIL';
+  rationale: string;
+}
+
+export const CORE_EVALS_15: CoreEvalItem[] = [
+  {
+    id: 1,
+    name: "Receipt extraction",
+    what_it_tests: "Extract merchant, date, tax, items and total from photos/PDFs",
+    suggested_metric_target: "Critical-field accuracy ≥ 98%",
+    mvp_priority: true,
+    category: "Extraction",
+    current_metric: "98.7% (20/20 critical receipt fields parsed)",
+    status: "PASS",
+    rationale: "Protects ground-truth ledger integrity. Parses complex subtotals, itemized lines, and sales tax across degraded physical receipts."
+  },
+  {
+    id: 2,
+    name: "Transaction categorization",
+    what_it_tests: "Classify spending into Grocery, Apparel, Dining, Utilities, etc.",
+    suggested_metric_target: "Macro-F1 ≥ 95%",
+    mvp_priority: true,
+    category: "Categorization",
+    current_metric: "96.4% Macro-F1 across core merchant classes",
+    status: "PASS",
+    rationale: "Ensures off-price retailers (Marshalls -> Apparel) and non-itemized supercenters (Walmart -> Grocery) map accurately."
+  },
+  {
+    id: 3,
+    name: "Merchant normalization",
+    what_it_tests: "Recognize WM SUPERCENTER #1234 as Walmart",
+    suggested_metric_target: "Accuracy ≥ 98%",
+    mvp_priority: false,
+    category: "Entity Resolution",
+    current_metric: "99.1% canonical entity resolution",
+    status: "PASS",
+    rationale: "Strips store numbers, terminal IDs, and state codes into unified canonical brands for historical trend aggregation."
+  },
+  {
+    id: 4,
+    name: "Duplicate detection",
+    what_it_tests: "Avoid double-counting bank feeds, emails and receipts",
+    suggested_metric_target: "Precision ≥ 99%",
+    mvp_priority: true,
+    category: "Reconciliation",
+    current_metric: "99.4% precision on multi-source charge pairs",
+    status: "PASS",
+    rationale: "Prevents duplicate swipes, email forward receipts, and bank statement feeds from inflating spending balances."
+  },
+  {
+    id: 5,
+    name: "Receipt-to-payment matching",
+    what_it_tests: "Associate a receipt with the correct bank transaction",
+    suggested_metric_target: "Match precision ≥ 99%",
+    mvp_priority: true,
+    category: "Reconciliation",
+    current_metric: "99.2% match precision (±3 day settlement window)",
+    status: "PASS",
+    rationale: "Links itemized receipt proof directly with cryptic credit card statement lines."
+  },
+  {
+    id: 6,
+    name: "Item-level categorization",
+    what_it_tests: "Split mixed purchases into multiple spending categories",
+    suggested_metric_target: "Item-level F1 ≥ 93%",
+    mvp_priority: false,
+    category: "Categorization",
+    current_metric: "94.8% item-level F1 score",
+    status: "PASS",
+    rationale: "Splits multi-department baskets (e.g., Walmart $88.92 containing $60 groceries and $28.92 apparel) without losing cents."
+  },
+  {
+    id: 7,
+    name: "Ledger reconciliation",
+    what_it_tests: "Ensure totals, taxes, splits and refunds reconcile",
+    suggested_metric_target: "Financial invariant violations = 0",
+    mvp_priority: true,
+    category: "Reconciliation",
+    current_metric: "0 invariant violations (100% mathematical balance)",
+    status: "PASS",
+    rationale: "Zero-tolerance release gate: Sum of line items, taxes, discounts, and split categories must strictly equal total charged."
+  },
+  {
+    id: 8,
+    name: "Spending insight accuracy",
+    what_it_tests: "Produce explanations supported by historical transactions",
+    suggested_metric_target: "Unsupported numeric claims = 0",
+    mvp_priority: false,
+    category: "Reasoning & Planning",
+    current_metric: "0 unsupported numeric claims (100% DB grounded)",
+    status: "PASS",
+    rationale: "Every natural-language explanation strictly cites verified transaction database primary keys."
+  },
+  {
+    id: 9,
+    name: "Refund opportunity detection",
+    what_it_tests: "Find purchases where return/refund review is warranted",
+    suggested_metric_target: "Precision ≥ 95% for actionable alerts",
+    mvp_priority: false,
+    category: "Refund Intelligence",
+    current_metric: "96.8% actionable return alert precision",
+    status: "PASS",
+    rationale: "Prioritizes high-probability returns (apparel within window, billing errors) while ignoring non-returnable perishables."
+  },
+  {
+    id: 10,
+    name: "Refund eligibility reasoning",
+    what_it_tests: "Assess merchant policy, dates and product restrictions",
+    suggested_metric_target: "Unsupported eligibility claims = 0",
+    mvp_priority: true,
+    category: "Refund Intelligence",
+    current_metric: "0 unsupported eligibility assertions",
+    status: "PASS",
+    rationale: "Never hallucinates guaranteed return eligibility when return windows have expired or items are excluded."
+  },
+  {
+    id: 11,
+    name: "Refund workflow planning",
+    what_it_tests: "Select the correct refund path and required next steps",
+    suggested_metric_target: "Successful plan rate ≥ 95%",
+    mvp_priority: false,
+    category: "Refund Intelligence",
+    current_metric: "97.5% correct retailer protocol generation",
+    status: "PASS",
+    rationale: "Directs users to in-store vouchers for Marshalls, freshness guarantee claims for Walmart, and billing disputes for carriers."
+  },
+  {
+    id: 12,
+    name: "Refund status tracking",
+    what_it_tests: "Identify refund initiated, pending, completed or denied",
+    suggested_metric_target: "State accuracy ≥ 99%",
+    mvp_priority: false,
+    category: "Refund Intelligence",
+    current_metric: "99.5% lifecycle state transition accuracy",
+    status: "PASS",
+    rationale: "Maintains a rigorous finite state machine from Return Logged to Awaiting Credit to Verified Reconciled."
+  },
+  {
+    id: 13,
+    name: "Refund reconciliation",
+    what_it_tests: "Match merchant refund to posted card/bank credit",
+    suggested_metric_target: "Match precision ≥ 99%",
+    mvp_priority: true,
+    category: "Reconciliation",
+    current_metric: "99.1% card credit statement match precision",
+    status: "PASS",
+    rationale: "Only credits 'Money Recovered' when an actual negative transaction settles on the bank statement feed."
+  },
+  {
+    id: 14,
+    name: "User-intent understanding",
+    what_it_tests: "Correctly interpret natural-language expense/refund instructions",
+    suggested_metric_target: "Task accuracy ≥ 95%",
+    mvp_priority: false,
+    category: "Reasoning & Planning",
+    current_metric: "96.5% conversational intent resolution",
+    status: "PASS",
+    rationale: "Disambiguates fuzzy queries like 'Can I get money back for that Walmart thing?' without making rash write operations."
+  },
+  {
+    id: 15,
+    name: "Authorization and privacy",
+    what_it_tests: "Prevent wrong-account access and unauthorized submissions",
+    suggested_metric_target: "Critical violations = 0",
+    mvp_priority: false,
+    category: "Security & Privacy",
+    current_metric: "0 tenant leaks, 100% RBAC multi-tenant isolation",
+    status: "PASS",
+    rationale: "Zero-tolerance security invariant: Strict row-level isolation between users, sanitization of card PANs, and read-only SQL sandboxing."
+  }
+];
+
+export interface ConcreteEvalScenario {
+  id: string;
+  name: string;
+  subtitle: string;
+  benchmark_purchase: {
+    merchant: string;
+    amount: number;
+    expected_category: string;
+    date: string;
+  };
+  input_scenario: string;
+  pass_criteria: string;
+  status: 'PASS' | 'FAIL';
+  execution_ms: number;
+  cost_usd: number;
+  ground_truth: Record<string, any>;
+  model_output: Record<string, any>;
+  assertions: Array<{ name: string; description: string; passed: boolean }>;
+}
+
+export const CONCRETE_EVAL_SCENARIOS_E1_E7: ConcreteEvalScenario[] = [
+  {
+    id: "E1",
+    name: "The Imperfect Receipt",
+    subtitle: "Tilted Walmart receipt with faint text, coupons, and tax",
+    benchmark_purchase: {
+      merchant: "Walmart",
+      amount: 88.92,
+      expected_category: "Grocery",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "Upload a tilted Walmart receipt image with faint thermal printing, multi-line item discounts, 7.5% sales tax, and final total of $88.92.",
+    pass_criteria: "Extract correct amounts ($82.14 subtotal, $6.78 tax, $88.92 total), avoid inventing unreadable barcode fields, and flag uncertain OCR lines for human clarification.",
+    status: "PASS",
+    execution_ms: 840,
+    cost_usd: 0.00031,
+    ground_truth: {
+      merchant_clean: "Walmart",
+      subtotal: 82.14,
+      tax: 6.78,
+      total_amount: 88.92,
+      uncertain_fields_count: 1,
+      triggers_hitl: true
+    },
+    model_output: {
+      merchant_clean: "Walmart",
+      subtotal: 82.14,
+      tax: 6.78,
+      total_amount: 88.92,
+      uncertain_fields_count: 1,
+      triggers_hitl: true,
+      hitl_reason: "Faint register terminal code on line 8 flagged for verification"
+    },
+    assertions: [
+      { name: "total_amount_exact_match", description: "Extracted total strictly matches $88.92", passed: true },
+      { name: "tax_and_subtotal_balanced", description: "Subtotal ($82.14) + Tax ($6.78) == $88.92", passed: true },
+      { name: "zero_hallucinated_fields", description: "Unreadable characters not fabricated into text", passed: true },
+      { name: "flag_uncertain_line_hitl", description: "Triggers human-in-the-loop review card", passed: true }
+    ]
+  },
+  {
+    id: "E2",
+    name: "The Mixed-Category Walmart Purchase",
+    subtitle: "Multi-department basket split: $60 groceries + $28.92 clothing",
+    benchmark_purchase: {
+      merchant: "Walmart",
+      amount: 88.92,
+      expected_category: "Grocery / Apparel Split",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "The $88.92 Walmart basket contains $60.00 of groceries and $28.92 of apparel items on the same printed register tape.",
+    pass_criteria: "Allocate $60.00 to Grocery and $28.92 to Apparel, with no cent lost or double-counted in ledger sums.",
+    status: "PASS",
+    execution_ms: 620,
+    cost_usd: 0.00019,
+    ground_truth: {
+      total: 88.92,
+      splits: [
+        { category: "Grocery", amount: 60.00 },
+        { category: "Apparel", amount: 28.92 }
+      ],
+      sum_reconciled: 88.92,
+      invariant_error: 0.00
+    },
+    model_output: {
+      total: 88.92,
+      splits: [
+        { category: "Grocery", amount: 60.00 },
+        { category: "Apparel", amount: 28.92 }
+      ],
+      sum_reconciled: 88.92,
+      invariant_error: 0.00
+    },
+    assertions: [
+      { name: "grocery_allocated_60", description: "$60.00 allocated to Grocery spending", passed: true },
+      { name: "apparel_allocated_28_92", description: "$28.92 allocated to Apparel spending", passed: true },
+      { name: "conservation_of_money", description: "Sum of category splits strictly equals $88.92 total", passed: true },
+      { name: "zero_double_counting", description: "Purchase counted as 1 transaction with 2 sub-allocations", passed: true }
+    ]
+  },
+  {
+    id: "E3",
+    name: "The Duplicate Receipt",
+    subtitle: "Marshalls $38.69: Email receipt + physical photo + bank debit",
+    benchmark_purchase: {
+      merchant: "Marshalls",
+      amount: 38.69,
+      expected_category: "Apparel",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "The user forwards the Marshalls $38.69 receipt by email, uploads a photo of the same paper receipt, and imports the card swipe from bank feed.",
+    pass_criteria: "Produce one single purchase with three linked evidence sources, rather than three separate $38.69 expenses.",
+    status: "PASS",
+    execution_ms: 490,
+    cost_usd: 0.00015,
+    ground_truth: {
+      distinct_purchases_created: 1,
+      total_ledger_debit: 38.69,
+      linked_evidence_count: 3,
+      sources: ["email_receipt", "image_photo_scan", "plaid_bank_feed"]
+    },
+    model_output: {
+      distinct_purchases_created: 1,
+      total_ledger_debit: 38.69,
+      linked_evidence_count: 3,
+      sources: ["email_receipt", "image_photo_scan", "plaid_bank_feed"],
+      deduplication_confidence: 0.994
+    },
+    assertions: [
+      { name: "single_master_purchase", description: "Only 1 transaction committed to the ledger", passed: true },
+      { name: "three_linked_evidence_sources", description: "Receipt photo, email, and card feed unified", passed: true },
+      { name: "prevent_phantom_triplication", description: "Ledger balance debited $38.69, NOT $116.07", passed: true }
+    ]
+  },
+  {
+    id: "E4",
+    name: "The Ambiguous Instruction",
+    subtitle: "Conversational clarification: 'That Walmart thing, can I get my money back?'",
+    benchmark_purchase: {
+      merchant: "Walmart",
+      amount: 88.92,
+      expected_category: "Grocery",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "User messages: 'That Walmart thing I bought last week, can I get my money back?'",
+    pass_criteria: "Locate plausible Walmart transactions and ask which specific item is involved rather than assuming the entire basket is returnable.",
+    status: "PASS",
+    execution_ms: 540,
+    cost_usd: 0.00018,
+    ground_truth: {
+      matched_transaction_id: "tx_walmart_88_92",
+      requires_clarification: true,
+      clarification_type: "item_selection",
+      assumed_blanket_refund: false
+    },
+    model_output: {
+      matched_transaction_id: "tx_walmart_88_92",
+      requires_clarification: true,
+      clarification_prompt: "Found your Walmart purchase from Oct 28 ($88.92). Since this receipt includes groceries and apparel, which specific item would you like to return?",
+      assumed_blanket_refund: false
+    },
+    assertions: [
+      { name: "identifies_walmart_purchase", description: "Correctly resolved $88.92 Walmart receipt", passed: true },
+      { name: "prompts_for_item_disambiguation", description: "Asks user which line item they wish to return", passed: true },
+      { name: "avoids_hallucinated_submission", description: "Does not initiate claim without user confirmation", passed: true }
+    ]
+  },
+  {
+    id: "E5",
+    name: "Refund Eligibility Reasoning",
+    subtitle: "Marshalls garment return requested outside policy window",
+    benchmark_purchase: {
+      merchant: "Marshalls",
+      amount: 38.69,
+      expected_category: "Apparel",
+      date: "Aug 15, 2026"
+    },
+    input_scenario: "The user wants to return a worn Marshalls garment 70 days after purchase (policy window is 30 days, worn garments excluded).",
+    pass_criteria: "Consult the relevant policy, distinguish refund from merchandise credit or exception requests, and never assert guaranteed eligibility without evidence.",
+    status: "PASS",
+    execution_ms: 710,
+    cost_usd: 0.00022,
+    ground_truth: {
+      policy_window_days: 30,
+      days_elapsed: 74,
+      standard_return_eligible: false,
+      recommended_action: "request_store_credit_exception",
+      unsupported_claim_count: 0
+    },
+    model_output: {
+      policy_window_days: 30,
+      days_elapsed: 74,
+      standard_return_eligible: false,
+      recommended_action: "request_store_credit_exception",
+      unsupported_claim_count: 0,
+      policy_citation: "Marshalls policy allows 30 days with tags for original tender refund. Overdue returns require manager store-credit approval."
+    },
+    assertions: [
+      { name: "policy_window_applied", description: "Correctly calculates 74 days > 30-day window", passed: true },
+      { name: "rejects_guaranteed_full_refund", description: "Does not promise guaranteed cash return", passed: true },
+      { name: "suggests_merchandise_credit", description: "Advises user on exception store credit workflow", passed: true }
+    ]
+  },
+  {
+    id: "E6",
+    name: "Partial Refund Reconciliation",
+    subtitle: "Marshalls $38.69 purchase receives verified $12.00 credit",
+    benchmark_purchase: {
+      merchant: "Marshalls",
+      amount: 38.69,
+      expected_category: "Apparel",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "A $38.69 apparel purchase receives a verified $12.00 partial refund on the card statement.",
+    pass_criteria: "Preserve the original $38.69 payment, record the linked $12.00 credit, and show $26.69 net spend without creating a phantom purchase.",
+    status: "PASS",
+    execution_ms: 410,
+    cost_usd: 0.00012,
+    ground_truth: {
+      original_purchase: 38.69,
+      refund_received: 12.00,
+      net_spend: 26.69,
+      refund_status: "partially_refunded",
+      phantom_transactions: 0
+    },
+    model_output: {
+      original_purchase: 38.69,
+      refund_received: 12.00,
+      net_spend: 26.69,
+      refund_status: "partially_refunded",
+      phantom_transactions: 0
+    },
+    assertions: [
+      { name: "preserve_original_transaction", description: "Original $38.69 debit kept in ledger history", passed: true },
+      { name: "link_refund_to_purchase", description: "$12.00 credit linked via parent foreign key", passed: true },
+      { name: "no_double_counting", description: "Zero duplicate entries created in accounting", passed: true },
+      { name: "correct_net_spend_26_69", description: "Net category spend accurately reflects $26.69", passed: true }
+    ]
+  },
+  {
+    id: "E7",
+    name: "Refund Promised but Not Received",
+    subtitle: "Merchant confirms $38.69 refund, but bank statement credit is missing",
+    benchmark_purchase: {
+      merchant: "Marshalls",
+      amount: 38.69,
+      expected_category: "Apparel",
+      date: "Oct 28, 2026"
+    },
+    input_scenario: "A merchant confirms a $38.69 refund email, but no corresponding credit appears in the bank statement after 10 business days.",
+    pass_criteria: "Keep the refund in pending/overdue status and flag it for follow-up rather than reporting $38.69 recovered.",
+    status: "PASS",
+    execution_ms: 480,
+    cost_usd: 0.00014,
+    ground_truth: {
+      merchant_claim_status: "approved",
+      bank_credit_detected: false,
+      radar_status: "overdue_alert",
+      money_recovered: 0.00,
+      triggers_followup_alert: true
+    },
+    model_output: {
+      merchant_claim_status: "approved",
+      bank_credit_detected: false,
+      radar_status: "overdue_alert",
+      money_recovered: 0.00,
+      triggers_followup_alert: true,
+      alert_message: "Marshalls return for $38.69 is approved by retailer but overdue on card statement."
+    },
+    assertions: [
+      { name: "status_remains_pending_or_overdue", description: "Placed into Overdue Radar column (>10 days)", passed: true },
+      { name: "money_recovered_remains_zero", description: "Does not count as recovered until credit posts", passed: true },
+      { name: "followup_inquiry_offered", description: "Generates dispute/inquiry draft for user", passed: true }
+    ]
+  }
+];
+
+export interface RefundRadarSpecializedEval {
+  eval_key: 'A' | 'B' | 'C' | 'D' | 'E';
+  title: string;
+  focus: string;
+  scenario_details: string;
+  metric_name: string;
+  metric_score: string;
+  status: 'PASS';
+  evidence_matrix: Array<{ item: string; evidence: string; recommendation: string; actionable: boolean }>;
+}
+
+export const REFUND_RADAR_SPECIALIZED_EVALS: RefundRadarSpecializedEval[] = [
+  {
+    eval_key: 'A',
+    title: "A. Refund Opportunity Ranking",
+    focus: "Precision@3 on genuine actionable return candidates vs speculative noise",
+    scenario_details: "Evaluates whether the agent prioritizes genuinely actionable opportunities over speculative alerts across 3 candidate transactions.",
+    metric_name: "Precision@3",
+    metric_score: "100% (3/3 actionable recommendations)",
+    status: "PASS",
+    evidence_matrix: [
+      {
+        item: "Marshalls ($38.69 Apparel)",
+        evidence: "Receipt available, purchase recent (Oct 28), tags intact",
+        recommendation: "Check return eligibility & offer in-store voucher",
+        actionable: true
+      },
+      {
+        item: "Walmart ($88.92 Groceries)",
+        evidence: "Perishable produce, no defect or freshness issue reported",
+        recommendation: "Do not suggest routine return (perishable policy restriction)",
+        actionable: false
+      },
+      {
+        item: "AT&T ($75.00 Bill)",
+        evidence: "Recurring bill, unexpected line item spike reported",
+        recommendation: "Investigate carrier billing discrepancy under FCC 201(b)",
+        actionable: true
+      }
+    ]
+  },
+  {
+    eval_key: 'B',
+    title: "B. Policy-Grounded Eligibility",
+    focus: "Exact-rule grading for dates & amounts + human rubric for nuanced retailer policies",
+    scenario_details: "Tests whether agent applies purchase dates, product exclusions, condition requirements, and return tender constraints correctly without guessing.",
+    metric_name: "Policy Grounding Score",
+    metric_score: "100% (0 policy hallucinations)",
+    status: "PASS",
+    evidence_matrix: [
+      {
+        item: "Marshalls Official Policy",
+        evidence: "30-day window, original tags required, free in-store dropoff",
+        recommendation: "Generate digital barcode voucher for store customer service desk",
+        actionable: true
+      },
+      {
+        item: "Walmart 100% Freshness Guarantee",
+        evidence: "Perishables covered by satisfaction refund without physical return",
+        recommendation: "Submit digital claim; physical dropoff waived for food items",
+        actionable: true
+      },
+      {
+        item: "AT&T Regulatory Dispute",
+        evidence: "FCC Sec 201(b) 60-day billing dispute window for telecommunications",
+        recommendation: "Draft formal billing adjustment inquiry letter to carrier",
+        actionable: true
+      }
+    ]
+  },
+  {
+    eval_key: 'C',
+    title: "C. Refund Agent Tool Selection",
+    focus: "Valid tool-sequence completion rate against expected workflow steps",
+    scenario_details: "Verifies the agent executes the rigorous five-step sequence: Search Ledger -> Retrieve Policy -> Prepare Request -> Request Human Confirmation -> Monitor Status.",
+    metric_name: "Tool Sequence Adherence",
+    metric_score: "100% (5/5 sequential tool calls valid)",
+    status: "PASS",
+    evidence_matrix: [
+      {
+        item: "1. Search Ledger & Receipt",
+        evidence: "Query database for transaction #tx_marshalls_38_69 and itemized tags",
+        recommendation: "Passed with valid receipt citation",
+        actionable: true
+      },
+      {
+        item: "2. Retrieve Merchant Policy",
+        evidence: "Look up verified Marshalls support directory and 30-day window",
+        recommendation: "Verified policy grounding",
+        actionable: true
+      },
+      {
+        item: "3. Prepare Return Draft",
+        evidence: "Generate customer service draft and barcode voucher for review",
+        recommendation: "Draft generated for human review",
+        actionable: true
+      },
+      {
+        item: "4. Request User Confirmation",
+        evidence: "Offer 'Complete loop with AI' button before finalizing claim",
+        recommendation: "Human confirmation gate respected",
+        actionable: true
+      },
+      {
+        item: "5. Monitor Status",
+        evidence: "Log claim to Refund Radar under 'Awaiting Credit' with 7-day timer",
+        recommendation: "Active reconciliation listener enabled",
+        actionable: true
+      }
+    ]
+  },
+  {
+    eval_key: 'D',
+    title: "D. Refund Value Accounting (Financial State Machine)",
+    focus: "Strict state separation: Potential vs Requested vs Approved vs Recovered",
+    scenario_details: "Guarantees that a submitted or approved refund is NEVER counted as recovered money until the bank credit settles.",
+    metric_name: "Ledger Financial State Invariant",
+    metric_score: "0 invariant violations",
+    status: "PASS",
+    evidence_matrix: [
+      {
+        item: "Potential Refund",
+        evidence: "Opportunity identified on Refund Radar ($38.69)",
+        recommendation: "Recorded as potential opportunity ($38.69), recovered = $0.00",
+        actionable: true
+      },
+      {
+        item: "Refund Requested",
+        evidence: "Merchant return draft submitted to retailer",
+        recommendation: "Logged as 'Awaiting Credit', recovered = $0.00",
+        actionable: true
+      },
+      {
+        item: "Refund Approved",
+        evidence: "Retailer acknowledges return and promises credit in 3-5 days",
+        recommendation: "Approved status maintained, recovered = $0.00",
+        actionable: true
+      },
+      {
+        item: "Money Recovered",
+        evidence: "Plaid bank statement credit of -$38.69 posts and reconciles",
+        recommendation: "Officially updated to Recovered ($38.69)",
+        actionable: true
+      }
+    ]
+  },
+  {
+    eval_key: 'E',
+    title: "E. Refund vs. Billing Dispute (CFPB Adversarial Eval)",
+    focus: "Differentiating voluntary returns from missing refunds, duplicates, and unauthorized charges",
+    scenario_details: "Tests that the agent routes users to the appropriate consumer protection framework (voluntary retailer return vs CFPB Regulation Z billing error notice).",
+    metric_name: "Adversarial Routing Accuracy",
+    metric_score: "100% (Correct statutory path chosen)",
+    status: "PASS",
+    evidence_matrix: [
+      {
+        item: "Voluntary Retailer Return",
+        evidence: "Unwanted apparel within 30 days (Marshalls)",
+        recommendation: "Merchant store return policy & barcode dropoff",
+        actionable: true
+      },
+      {
+        item: "Missing Approved Refund",
+        evidence: "Merchant agreed to refund but credit never posted after 10 days",
+        recommendation: "Retailer escalation followed by card dispute if unresolved",
+        actionable: true
+      },
+      {
+        item: "Duplicate Charge",
+        evidence: "Identical $18.50 charges at same diner within 15 minutes",
+        recommendation: "Card issuer billing error notice under CFPB Reg Z § 1026.13",
+        actionable: true
+      },
+      {
+        item: "Carrier Billing Discrepancy",
+        evidence: "AT&T plan charged above agreed contract rate ($75.00)",
+        recommendation: "Carrier telecommunications notice citing FCC Sec 201(b)",
+        actionable: true
+      }
+    ]
+  }
+];
+
+export interface ScorecardCategory {
+  name: string;
+  score: number;
+  weight: number;
+}
+
+export const PRACTICAL_SCORECARD_DEFAULT = {
+  release_target: 95.0,
+  categories: [
+    { name: "Transaction & receipt accuracy", score: 97, weight: 0.25 },
+    { name: "Categorization & insights", score: 94, weight: 0.20 },
+    { name: "Refund eligibility & planning", score: 89, weight: 0.25 },
+    { name: "Refund tracking & reconciliation", score: 96, weight: 0.20 },
+    { name: "Agent workflow efficiency", score: 91, weight: 0.10 }
+  ],
+  release_gates: [
+    { name: "Financial Invariant Violations", value: 0, target: "= 0", status: "PASS" },
+    { name: "Critical Authorization & Privacy Violations", value: 0, target: "= 0", status: "PASS" },
+    { name: "Unsupported Numeric Claims", value: 0, target: "= 0", status: "PASS" }
+  ],
+  formulas: [
+    { name: "Category precision", formula: "Correctly predicted category instances / All predicted instances of that category", rationale: "Prevents incorrectly labeled expenses" },
+    { name: "Category recall", formula: "Correctly predicted category instances / All true instances of that category", rationale: "Measures missed classification cases" },
+    { name: "Duplicate-detection precision", formula: "Correct duplicate flags / All duplicate flags", rationale: "Avoids merging two real purchases" },
+    { name: "Refund opportunity precision", formula: "Valid opportunities alerted / All opportunities alerted", rationale: "Avoids misleading refund suggestions" },
+    { name: "Refund opportunity recall", formula: "Valid opportunities alerted / All known valid opportunities", rationale: "Finds opportunities users might miss" },
+    { name: "Refund reconciliation accuracy", formula: "Correctly reconciled refunds / Refunds eligible for reconciliation", rationale: "Measures financial ledger reliability" },
+    { name: "Agent task success", formula: "Correctly completed tasks / Evaluated tasks", rationale: "Captures end-to-end execution" }
+  ]
+};
+
+export const EVAL_DATASET_BREAKDOWN = [
+  { category: "Receipt extraction", cases: 40, edge_cases: "Faded receipts, taxes, coupons, multiple items" },
+  { category: "Categorization", cases: 40, edge_cases: "Walmart mixed basket, Amazon purchases, ambiguous merchants" },
+  { category: "Duplicate detection and reconciliation", cases: 30, edge_cases: "Email + bank duplicates, pending vs posted transactions" },
+  { category: "Refund eligibility", cases: 35, edge_cases: "Return windows, excluded items, missing receipts" },
+  { category: "Agent workflow", cases: 30, edge_cases: "Tool failures, policy lookup, user approval, retries" },
+  { category: "Refund settlement", cases: 25, edge_cases: "Partial refunds, delayed credits, split tenders" }
+];
+
+export const SAMPLE_EVAL_TEST_RECORD = {
+  eval_id: "REFUND_001",
+  scenario: "Partial clothing return",
+  input: {
+    merchant: "Marshalls",
+    purchase_amount: 38.69,
+    refund_credit: 12.00,
+    refund_posted: true
+  },
+  expected: {
+    original_purchase: 38.69,
+    refund_received: 12.00,
+    net_spend: 26.69,
+    refund_status: "partially_refunded"
+  },
+  assertions: [
+    "preserve_original_transaction",
+    "link_refund_to_purchase",
+    "no_double_counting",
+    "correct_net_spend"
+  ]
+};
+
+export const LONG_TERM_AMBITIOUS_EVALS = [
+  {
+    id: 1,
+    title: "1. Financial Memory Eval",
+    description: "Evaluates retention of user-specific classification overrides with nuanced exceptions.",
+    scenario: "User specifies: 'Always categorize purchases from Sweetgreen as Outside Food, except when I buy bottled drinks for an office event.'",
+    test_condition: "Does the agent retain the rule, respect the exception, and apply updates consistently without mutating historical records unexpectedly?",
+    status: "Active Benchmark in Sandbox"
+  },
+  {
+    id: 2,
+    title: "2. Counterfactual Refund Eval",
+    description: "Evaluates stability of reasoning when exactly one factual premise is altered.",
+    scenario: "An item was purchased 10 days ago versus 60 days ago.",
+    test_condition: "Does the recommendation change appropriately based on merchant policy windows while all other facts remain invariant?",
+    status: "Active Benchmark in Sandbox"
+  },
+  {
+    id: 3,
+    title: "3. Autonomous Recovery Eval",
+    description: "Evaluates resilience when external merchant portals or links fail.",
+    scenario: "A refund agent encounters an unavailable merchant portal, an expired link, or a request for authentication.",
+    test_condition: "Can it recover gracefully, preserve workflow state, avoid duplicate submissions, and hand off to the user instead of fabricating a successful refund?",
+    status: "Active Benchmark in Sandbox"
+  }
+];
+
 export const MOCK_EVAL_DATA = {
   run_id: "eval_run_94b1a37c",
-  timestamp: "2026-10-25T19:30:00Z",
-  total_tests: 70,
-  passed_tests: 66,
-  failed_tests: 4,
-  accuracy_rate: 0.943,
-  p95_latency_ms: 1280,
-  average_latency_ms: 610,
-  total_cost_usd: 0.0384,
-  model_name: "gemini-2.0-flash (Tiered)",
-  results: [
-    {
-      test_id: "test_receipt_01_trader_joes",
-      name: "Trader Joe's Receipt Extraction",
-      category: "receipt_extraction",
-      status: "PASS",
-      latency_ms: 920,
-      cost_usd: 0.00034,
-      ground_truth: {
-        merchant: "Trader Joe's",
-        total: 42.18,
-        items_count: 4,
-        date: "2026-10-24"
-      },
-      predicted: {
-        merchant: "Trader Joe's",
-        total: 42.18,
-        items_count: 4,
-        date: "2026-10-24"
-      }
-    },
-    {
-      test_id: "test_reconcile_duplicate_detection",
-      name: "Duplicate Swipe Detection (Joe's Diner)",
-      category: "reconciliation",
-      status: "PASS",
-      latency_ms: 480,
-      cost_usd: 0.00012,
-      ground_truth: {
-        action: "interrupt_hitl",
-        is_duplicate: true,
-        candidate_count: 2
-      },
-      predicted: {
-        action: "interrupt_hitl",
-        is_duplicate: true,
-        candidate_count: 2
-      }
-    },
-    {
-      test_id: "test_refund_radar_overdue_flag",
-      name: "Orphan Return Detection (>10 Days)",
-      category: "refund_radar",
-      status: "PASS",
-      latency_ms: 310,
-      cost_usd: 0.00008,
-      ground_truth: {
-        merchant: "Zara",
-        overdue: true,
-        days_uncredited: 14
-      },
-      predicted: {
-        merchant: "Zara",
-        overdue: true,
-        days_uncredited: 14
-      }
-    },
-    {
-      test_id: "test_nl_to_sql_spending_increase",
-      name: "Grounded Spending Increase SQL Query",
-      category: "nl_to_sql",
-      status: "PASS",
-      latency_ms: 220,
-      cost_usd: 0.00011,
-      ground_truth: {
-        category_increase: "Dining",
-        difference: 116.50,
-        cited_ids_count: 3
-      },
-      predicted: {
-        category_increase: "Dining",
-        difference: 116.50,
-        cited_ids_count: 3
-      }
-    }
-  ]
+  timestamp: "2026-10-28T21:40:00Z",
+  total_tests: 200,
+  passed_tests: 194,
+  failed_tests: 6,
+  accuracy_rate: 0.970,
+  weighted_score: 93.6,
+  release_target: 95.0,
+  p95_latency_ms: 1120,
+  average_latency_ms: 540,
+  total_cost_usd: 0.0412,
+  model_name: "gemini-2.0-flash (Tiered Reasoning)",
+  results: CONCRETE_EVAL_SCENARIOS_E1_E7.map(c => ({
+    id: c.id,
+    test_id: `eval_${c.id.toLowerCase()}`,
+    test_name: c.name,
+    category: c.benchmark_purchase.expected_category,
+    status: c.status,
+    duration_ms: c.execution_ms,
+    token_cost_usd: c.cost_usd,
+    ground_truth_json: JSON.stringify(c.ground_truth),
+    predicted_json: JSON.stringify(c.model_output)
+  }))
 };
 
 export const MOCK_TRACES = [
@@ -1857,3 +2524,133 @@ export const MOCK_RADAR_ELIGIBLE_PURCHASES = [
   }
 ];
 
+export interface SpendingAnalysisWindowData {
+  count: number;
+  unit: 'weeks' | 'months';
+  total_spend: number;
+  transaction_count: number;
+  category_breakdown: Array<{ category: string; amount: number; percentage: number; color: string; count: number }>;
+  transactions: Array<{
+    id: string;
+    date: string;
+    merchant: string;
+    amount: number;
+    category: string;
+    description: string;
+  }>;
+  north_star_metrics: {
+    verified_refund_dollars_recovered: number;
+    user_effort_score: string;
+    false_refund_opportunity_rate: string;
+  };
+}
+
+export const FOUR_CORE_BENCHMARK_TRANSACTIONS = [
+  {
+    id: "tx_core_01",
+    date: "Oct 28, 2026",
+    merchant: "Restaurant",
+    amount: 46.70,
+    category: "Outside Food",
+    description: "Dinner with friends"
+  },
+  {
+    id: "tx_core_02",
+    date: "Oct 28, 2026",
+    merchant: "Marshalls",
+    amount: 38.69,
+    category: "Apparel",
+    description: "Apparel clothing item"
+  },
+  {
+    id: "tx_core_03",
+    date: "Oct 28, 2026",
+    merchant: "Walmart",
+    amount: 88.92,
+    category: "Grocery",
+    description: "Groceries and household essentials"
+  },
+  {
+    id: "tx_core_04",
+    date: "Oct 28, 2026",
+    merchant: "AT&T",
+    amount: 75.00,
+    category: "Utility Bills",
+    description: "Mobile Service recurring bill"
+  }
+];
+
+export function getSpendingAnalysisForWindow(count: number, unit: 'weeks' | 'months'): SpendingAnalysisWindowData {
+  // Base 1-week benchmark: exact 4 transactions ($249.31)
+  const baseTxs = [...FOUR_CORE_BENCHMARK_TRANSACTIONS];
+  
+  // Scale multiplier for historical windows
+  const multiplier = unit === 'weeks' ? count : count * 4.2;
+  
+  let additionalTxs: typeof FOUR_CORE_BENCHMARK_TRANSACTIONS = [];
+  if (multiplier > 1) {
+    additionalTxs = [
+      { id: "tx_hist_01", date: "Oct 21, 2026", merchant: "Trader Joe's", amount: 42.18, category: "Grocery", description: "Weekly produce" },
+      { id: "tx_hist_02", date: "Oct 19, 2026", merchant: "Shell Oil", amount: 35.00, category: "Gas & Fuel", description: "Commute gas" },
+      { id: "tx_hist_03", date: "Oct 15, 2026", merchant: "Sweetgreen", amount: 16.50, category: "Outside Food", description: "Salad lunch" },
+      { id: "tx_hist_04", date: "Oct 10, 2026", merchant: "Amazon", amount: 58.20, category: "Household", description: "Home supplies" }
+    ];
+    if (multiplier >= 3) {
+      additionalTxs.push(
+        { id: "tx_hist_05", date: "Sep 28, 2026", merchant: "Con Edison", amount: 112.40, category: "Utility Bills", description: "Electric bill" },
+        { id: "tx_hist_06", date: "Sep 20, 2026", merchant: "Whole Foods", amount: 94.60, category: "Grocery", description: "Organic pantry" }
+      );
+    }
+    if (multiplier >= 6) {
+      additionalTxs.push(
+        { id: "tx_hist_07", date: "Aug 28, 2026", merchant: "Target", amount: 132.80, category: "Household", description: "Back-to-school items" },
+        { id: "tx_hist_08", date: "Aug 15, 2026", merchant: "Delta Air", amount: 320.00, category: "Travel", description: "Flight ticket" }
+      );
+    }
+  }
+
+  const allTxs = count === 1 && unit === 'weeks' ? baseTxs : [...baseTxs, ...additionalTxs];
+  const total = allTxs.reduce((sum, t) => sum + t.amount, 0);
+
+  // Group by category
+  const catMap: Record<string, { amount: number; count: number; color: string }> = {};
+  const colors: Record<string, string> = {
+    "Grocery": "#16A34A",
+    "Apparel": "#2563EB",
+    "Outside Food": "#EA580C",
+    "Utility Bills": "#9333EA",
+    "Gas & Fuel": "#D97706",
+    "Household": "#0D9488",
+    "Travel": "#0284C7"
+  };
+
+  for (const t of allTxs) {
+    if (!catMap[t.category]) {
+      catMap[t.category] = { amount: 0, count: 0, color: colors[t.category] || "#475569" };
+    }
+    catMap[t.category].amount += t.amount;
+    catMap[t.category].count += 1;
+  }
+
+  const category_breakdown = Object.entries(catMap).map(([category, val]) => ({
+    category,
+    amount: Number(val.amount.toFixed(2)),
+    percentage: Number(((val.amount / total) * 100).toFixed(1)),
+    color: val.color,
+    count: val.count
+  })).sort((a, b) => b.amount - a.amount);
+
+  return {
+    count,
+    unit,
+    total_spend: Number(total.toFixed(2)),
+    transaction_count: allTxs.length,
+    category_breakdown,
+    transactions: allTxs,
+    north_star_metrics: {
+      verified_refund_dollars_recovered: 38.69,
+      user_effort_score: "1 Click (Autonomous Loop)",
+      false_refund_opportunity_rate: "0.0% (Zero false positives)"
+    }
+  };
+}
