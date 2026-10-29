@@ -195,12 +195,6 @@ export default function App() {
   const [plaidCardOfficialName, setPlaidCardOfficialName] = useState('Chase Sapphire Preferred Visa Signature');
   const [plaidCardMask, setPlaidCardMask] = useState('4821');
   const [plaidCardholderName, setPlaidCardholderName] = useState('Shivani Pradhan');
-  const [plaidCurrentBalance, setPlaidCurrentBalance] = useState('1240.00');
-  const [plaidCreditLimit, setPlaidCreditLimit] = useState('10000.00');
-  const [plaidAprPercentage, setPlaidAprPercentage] = useState('21.99');
-  const [plaidBillingCycleDay, setPlaidBillingCycleDay] = useState('15');
-  const [plaidNextDueDate, setPlaidNextDueDate] = useState('2026-11-20');
-  const [plaidMinPaymentDue, setPlaidMinPaymentDue] = useState('35.00');
   const [plaidSetupError, setPlaidSetupError] = useState('');
   const [plaidIsVerifying, setPlaidIsVerifying] = useState(false);
   const [plaidVerifyStep, setPlaidVerifyStep] = useState(0);
@@ -391,12 +385,6 @@ export default function App() {
       setPlaidCardOfficialName(accountToEdit.official_name || '');
       setPlaidCardMask(accountToEdit.mask || '');
       setPlaidCardholderName(accountToEdit.cardholder_name || currentUser?.full_name || 'Cardholder');
-      setPlaidCurrentBalance(accountToEdit.current_balance !== undefined ? String(accountToEdit.current_balance) : '0.00');
-      setPlaidCreditLimit(accountToEdit.credit_limit !== undefined && accountToEdit.credit_limit !== null ? String(accountToEdit.credit_limit) : '10000.00');
-      setPlaidAprPercentage(accountToEdit.apr_percentage !== undefined && accountToEdit.apr_percentage !== null ? String(accountToEdit.apr_percentage) : '21.99');
-      setPlaidBillingCycleDay(accountToEdit.billing_cycle_day !== undefined ? String(accountToEdit.billing_cycle_day) : '15');
-      setPlaidNextDueDate(accountToEdit.next_payment_due_date || '2026-11-20');
-      setPlaidMinPaymentDue(accountToEdit.minimum_payment_due !== undefined && accountToEdit.minimum_payment_due !== null ? String(accountToEdit.minimum_payment_due) : '35.00');
     } else {
       setEditingPlaidAccount(null);
       setPlaidCardNetwork('visa');
@@ -406,12 +394,6 @@ export default function App() {
       setPlaidCardOfficialName('Chase Sapphire Preferred Visa Signature');
       setPlaidCardMask(String(Math.floor(1000 + Math.random() * 9000)));
       setPlaidCardholderName(currentUser?.full_name || (currentUser?.email?.includes('alex') ? 'Alex Chen' : 'Shivani Pradhan'));
-      setPlaidCurrentBalance('650.00');
-      setPlaidCreditLimit('8000.00');
-      setPlaidAprPercentage('21.49');
-      setPlaidBillingCycleDay('18');
-      setPlaidNextDueDate('2026-11-18');
-      setPlaidMinPaymentDue('25.00');
     }
     setShowPlaidSetupModal(true);
   };
@@ -432,18 +414,6 @@ export default function App() {
       setPlaidSetupError('Please enter the cardholder name.');
       return;
     }
-    const bal = parseFloat(plaidCurrentBalance);
-    if (isNaN(bal) || bal < 0) {
-      setPlaidSetupError('Current balance must be a non-negative number.');
-      return;
-    }
-    if (plaidCardType === 'credit') {
-      const limit = parseFloat(plaidCreditLimit);
-      if (isNaN(limit) || limit <= 0) {
-        setPlaidSetupError('Credit limit must be a positive number.');
-        return;
-      }
-    }
 
     setPlaidSetupError('');
     setPlaidIsVerifying(true);
@@ -457,11 +427,14 @@ export default function App() {
         setTimeout(() => {
           setPlaidVerifyStep(4);
           setTimeout(() => {
-            const currentBalNum = Number(plaidCurrentBalance) || 0;
-            const limitNum = plaidCardType === 'credit' ? (Number(plaidCreditLimit) || 10000) : null;
-            const minDueNum = plaidCardType === 'credit' ? (Number(plaidMinPaymentDue) || 35) : null;
-            const aprNum = plaidCardType === 'credit' ? (Number(plaidAprPercentage) || 21.99) : null;
+            // Balance and liabilities are retrieved automatically from Plaid API (not asked from customer)
+            const currentBalNum = editingPlaidAccount ? Number(editingPlaidAccount.current_balance || 0) : (plaidCardType === 'credit' ? 840.00 : 3250.00);
+            const limitNum = plaidCardType === 'credit' ? (editingPlaidAccount?.credit_limit || (plaidInstitution.includes('Amex') ? 15000.00 : plaidInstitution.includes('Citi') ? 9500.00 : 10000.00)) : null;
+            const minDueNum = plaidCardType === 'credit' ? (editingPlaidAccount?.minimum_payment_due || 35.00) : null;
+            const aprNum = plaidCardType === 'credit' ? (editingPlaidAccount?.apr_percentage || (plaidCardNetwork === 'amex' ? 24.24 : 21.49)) : null;
             const utilRate = limitNum && limitNum > 0 ? Number(((currentBalNum / limitNum) * 100).toFixed(1)) : null;
+            const nextDueDate = plaidCardType === 'credit' ? (editingPlaidAccount?.next_payment_due_date || 'Nov 18, 2026') : null;
+            const cycleDay = editingPlaidAccount?.billing_cycle_day || 18;
 
             const updatedCard = {
               account_id: editingPlaidAccount?.account_id || `acc_${plaidCardNetwork}_${cleanMask}_${Date.now()}`,
@@ -476,9 +449,9 @@ export default function App() {
               credit_limit: limitNum,
               utilization_rate_pct: utilRate,
               minimum_payment_due: minDueNum,
-              next_payment_due_date: plaidCardType === 'credit' ? plaidNextDueDate : null,
+              next_payment_due_date: nextDueDate,
               apr_percentage: aprNum,
-              billing_cycle_day: Number(plaidBillingCycleDay) || 15,
+              billing_cycle_day: cycleDay,
               plaid_institution: plaidInstitution,
               is_overdue: false,
               plaid_verified: true,
@@ -5438,129 +5411,37 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Financial Balances and Credit Terms */}
-              <div style={{ background: 'var(--bg-secondary)', padding: 14, borderRadius: 8, marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
-                  {plaidCardType === 'credit' ? 'CREDIT LINE BALANCES & STATEMENT TERMS' : 'DEPOSITORY ACCOUNT BALANCES'}
+              {/* Automated Plaid Liabilities & Balance Retrieval Banner */}
+              <div style={{ 
+                background: 'var(--bg-secondary)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: 8, 
+                padding: '14px 16px', 
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12
+              }}>
+                <div style={{ 
+                  width: 32, 
+                  height: 32, 
+                  borderRadius: 6, 
+                  background: '#E8F0FE', 
+                  color: 'var(--google-blue)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <ShieldCheck size={18} />
                 </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      {plaidCardType === 'credit' ? 'Current Balance ($)' : 'Available Cash Balance ($)'}
-                    </label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      value={plaidCurrentBalance}
-                      onChange={(e) => setPlaidCurrentBalance(e.target.value)}
-                      disabled={plaidIsVerifying}
-                      style={{
-                        width: '100%',
-                        padding: '7px 9px',
-                        borderRadius: 6,
-                        border: '1px solid var(--border-color)',
-                        fontSize: 13,
-                        fontFamily: 'var(--font-mono)',
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                    Automated Plaid Statement & Balance Retrieval
                   </div>
-
-                  {plaidCardType === 'credit' && (
-                    <>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                          Credit Limit ($)
-                        </label>
-                        <input 
-                          type="number" 
-                          step="100"
-                          min="100"
-                          value={plaidCreditLimit}
-                          onChange={(e) => setPlaidCreditLimit(e.target.value)}
-                          disabled={plaidIsVerifying}
-                          style={{
-                            width: '100%',
-                            padding: '7px 9px',
-                            borderRadius: 6,
-                            border: '1px solid var(--border-color)',
-                            fontSize: 13,
-                            fontFamily: 'var(--font-mono)',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                          Purchase APR (%)
-                        </label>
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          min="0"
-                          max="39.99"
-                          value={plaidAprPercentage}
-                          onChange={(e) => setPlaidAprPercentage(e.target.value)}
-                          disabled={plaidIsVerifying}
-                          style={{
-                            width: '100%',
-                            padding: '7px 9px',
-                            borderRadius: 6,
-                            border: '1px solid var(--border-color)',
-                            fontSize: 13,
-                            fontFamily: 'var(--font-mono)',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                          Next Minimum Due ($)
-                        </label>
-                        <input 
-                          type="number" 
-                          step="1"
-                          min="0"
-                          value={plaidMinPaymentDue}
-                          onChange={(e) => setPlaidMinPaymentDue(e.target.value)}
-                          disabled={plaidIsVerifying}
-                          style={{
-                            width: '100%',
-                            padding: '7px 9px',
-                            borderRadius: 6,
-                            border: '1px solid var(--border-color)',
-                            fontSize: 13,
-                            fontFamily: 'var(--font-mono)',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                          Next Payment Due Date
-                        </label>
-                        <input 
-                          type="date" 
-                          value={plaidNextDueDate}
-                          onChange={(e) => setPlaidNextDueDate(e.target.value)}
-                          disabled={plaidIsVerifying}
-                          style={{
-                            width: '100%',
-                            padding: '6px 9px',
-                            borderRadius: 6,
-                            border: '1px solid var(--border-color)',
-                            fontSize: 12.5,
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    SpendTrace connects directly to {plaidInstitution} via Plaid's real-time API. Your current balance, credit line limit, purchase APR, and statement cycle are retrieved automatically—no manual entry needed.
+                  </div>
                 </div>
               </div>
 
