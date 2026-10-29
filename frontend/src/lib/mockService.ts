@@ -721,7 +721,7 @@ export const REFUND_RADAR_SPECIALIZED_EVALS: RefundRadarSpecializedEval[] = [
       },
       {
         item: "4. Request User Confirmation",
-        evidence: "Offer 'Complete loop with AI' button before finalizing claim",
+        evidence: "Present editable dispute draft and verified support contact for human review",
         recommendation: "Human confirmation gate respected",
         actionable: true
       },
@@ -2860,7 +2860,7 @@ export function getSpendingAnalysisForWindow(count: number, unit: 'weeks' | 'mon
     transactions: allTxs,
     north_star_metrics: {
       verified_refund_dollars_recovered: 38.69,
-      user_effort_score: "1 Click (Autonomous Loop)",
+      user_effort_score: "Verified Dispute Draft",
       false_refund_opportunity_rate: "0.0% (Zero false positives)"
     }
   };

@@ -61,8 +61,6 @@ import {
   downloadCsvLocally, 
   generateCustomizedDisputeDraft, 
   type VendorSupportInfo, 
-  getRetailerProductNextStep,
-  completeRefundLoopWithAi,
   type RetailerNextStepInfo,
   mockInferCategory, 
   MOCK_SAMPLE_BILLS, 
@@ -151,8 +149,6 @@ export default function App() {
   const [disputeDraft, setDisputeDraft] = useState('');
   const [vendorContact, setVendorContact] = useState<VendorSupportInfo | null>(null);
   const [selectedRefundNextStep, setSelectedRefundNextStep] = useState<RetailerNextStepInfo | null>(null);
-  const [isCompletingAiLoop, setIsCompletingAiLoop] = useState(false);
-  const [aiLoopCompleted, setAiLoopCompleted] = useState<{ claim_code: string; message: string; deadline: string } | null>(null);
   const [disputeCopied, setDisputeCopied] = useState(false);
 
   // Evals State
@@ -902,8 +898,6 @@ export default function App() {
   const handleOpenDisputeModal = async (refund: any) => {
     setSelectedRefundForDispute(refund);
     setDisputeCopied(false);
-    setAiLoopCompleted(null);
-    setIsCompletingAiLoop(false);
     
     // 1. Generate client-side draft & next step protocol instantly (resilient on GitHub Pages)
     const clientDraft = generateCustomizedDisputeDraft(
@@ -942,107 +936,6 @@ export default function App() {
       }
     } catch (e) {
       // Offline fallback already active
-    }
-  };
-
-  // Complete Loop with AI: Automates retailer filing, queues voucher/claim, and activates Refund Radar statement monitoring
-  const handleCompleteRefundLoopWithAi = async () => {
-    if (!selectedRefundForDispute) return;
-    setIsCompletingAiLoop(true);
-    
-    const merchantName = selectedRefundForDispute.merchant_name || selectedRefundForDispute.merchant || "Retailer";
-    const amount = Math.abs(Number(selectedRefundForDispute.expected_amount || selectedRefundForDispute.amount || 0));
-    const itemDesc = selectedRefundForDispute.item_description || "Merchandise";
-    const nextStep = selectedRefundNextStep || getRetailerProductNextStep(merchantName, itemDesc, amount, selectedRefundForDispute.category);
-
-    try {
-      let claimCode = nextStep.claim_code;
-      let deadlineStr = "Nov 4, 2026";
-      let successMsg = "";
-
-      const res = await fetch(`${API_BASE}/refunds/complete-loop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          merchant_name: merchantName,
-          amount: amount,
-          item_description: itemDesc,
-          claim_code: nextStep.claim_code,
-          dispute_draft: disputeDraft
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        claimCode = data.claim_code || claimCode;
-        deadlineStr = data.settlement_deadline || deadlineStr;
-        successMsg = data.message;
-      } else {
-        const fallback = completeRefundLoopWithAi(selectedRefundForDispute, currentUser?.full_name);
-        claimCode = fallback.claim_code;
-        deadlineStr = fallback.expected_deadline;
-        successMsg = fallback.message;
-      }
-
-      setAiLoopCompleted({
-        claim_code: claimCode,
-        message: successMsg,
-        deadline: deadlineStr
-      });
-
-      // Update refunds list: move or add to 'awaiting_credit'
-      setRefunds(prev => {
-        const exists = prev.some(r => r.merchant_name?.toLowerCase() === merchantName.toLowerCase());
-        const newRefund = {
-          id: `ref_ai_${Date.now()}`,
-          merchant_name: merchantName,
-          expected_amount: amount,
-          return_date: new Date().toISOString().split('T')[0],
-          deadline_date: deadlineStr,
-          status: 'awaiting_credit',
-          item_description: itemDesc,
-          claim_code: claimCode
-        };
-        if (exists) {
-          return prev.map(r => r.merchant_name?.toLowerCase() === merchantName.toLowerCase() 
-            ? { ...r, status: 'awaiting_credit', deadline_date: deadlineStr, claim_code: claimCode } 
-            : r);
-        } else {
-          return [newRefund, ...prev];
-        }
-      });
-
-      // Timeline entry for AI audit trail
-      setMessages(prev => [
-        ...prev,
-        {
-          sender: 'agent',
-          text: `🤖 **Refund Loop Completed with AI**: Processed **${merchantName}** (${itemDesc}, **$${amount.toFixed(2)}**). Assigned Claim Reference **#${claimCode}**. Placed on Refund Radar under **Awaiting Bank Credit** (Settlement deadline: **${deadlineStr}**). Continuous bank statement reconciliation active.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-    } catch (e) {
-      const fallback = completeRefundLoopWithAi(selectedRefundForDispute, currentUser?.full_name);
-      setAiLoopCompleted({
-        claim_code: fallback.claim_code,
-        message: fallback.message,
-        deadline: fallback.expected_deadline
-      });
-      setRefunds(prev => [
-        {
-          id: `ref_ai_${Date.now()}`,
-          merchant_name: merchantName,
-          expected_amount: amount,
-          return_date: new Date().toISOString().split('T')[0],
-          deadline_date: fallback.expected_deadline,
-          status: 'awaiting_credit',
-          item_description: itemDesc,
-          claim_code: fallback.claim_code
-        },
-        ...prev
-      ]);
-    } finally {
-      setIsCompletingAiLoop(false);
     }
   };
 
@@ -2577,7 +2470,7 @@ export default function App() {
                           <div className="metric-val" style={{ color: 'var(--google-blue)' }}>
                             {analysis.north_star_metrics.user_effort_score}
                           </div>
-                          <div className="metric-hint">One-click autonomous loop closure</div>
+                          <div className="metric-hint">Human-reviewed dispute draft & verified contacts</div>
                         </div>
                         <div className="north-star-card">
                           <div className="metric-label">False Refund Opportunity Rate</div>
@@ -3401,7 +3294,7 @@ export default function App() {
                   </strong>
                 </div>
                 <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                  Never forget an uncredited return. SpendTrace tracks merchant return windows (30 days for Marshalls, 7 days for Walmart Freshness Guarantee), drafts verified dispute notices, and completes loops with AI.
+                  Never forget an uncredited return. SpendTrace tracks merchant return windows (30 days for Marshalls, 7 days for Walmart Freshness Guarantee), and drafts verified dispute notices tailored to merchant policies.
                 </p>
               </div>
 
@@ -4564,7 +4457,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Dispute Notice & Return Concierge Modal with Retailer Next Step & Complete Loop with AI */}
+      {/* Dispute Notice & Return Concierge Modal with Retailer Next Step */}
       {showDisputeModal && selectedRefundForDispute && vendorContact && (
         <div className="auth-modal-backdrop" onClick={() => setShowDisputeModal(false)}>
           <div className="dispute-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 860, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -4588,53 +4481,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* If AI Loop Completed: Show Celebration / Success Card */}
-            {aiLoopCompleted ? (
-              <div className="ai-loop-success-card">
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                  <CheckCircle2 size={28} />
-                </div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#166534', margin: '0 0 6px 0' }}>
-                  Refund Loop Successfully Completed with AI!
-                </h3>
-                <p style={{ fontSize: 13, color: '#15803D', margin: '0 0 16px 0', lineHeight: 1.5, maxWidth: 620, marginLeft: 'auto', marginRight: 'auto' }}>
-                  {aiLoopCompleted.message}
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, background: '#FFFFFF', padding: '14px', borderRadius: 8, border: '1px solid #BBF7D0', marginBottom: 18, textAlign: 'left' }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Claim Reference</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{aiLoopCompleted.claim_code}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Refund Radar Column</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--google-blue)' }}>2. Awaiting Bank Credit</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Settlement Deadline</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#D97706' }}>{aiLoopCompleted.deadline}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
-                  <button 
-                    className="primary-btn" 
-                    onClick={() => { setShowDisputeModal(false); setActiveTab('radar'); }}
-                    style={{ padding: '9px 20px', fontWeight: 600 }}
-                  >
-                    View on Refund Radar Board
-                  </button>
-                  <button 
-                    className="secondary-btn" 
-                    onClick={() => setShowDisputeModal(false)}
-                    style={{ padding: '9px 18px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Retailer & Product Protocol Banner (Appropriate Next Step) */}
-                {selectedRefundNextStep && (
+            {/* Retailer & Product Protocol Banner (Appropriate Next Step) */}
+            {selectedRefundNextStep && (
                   <div className="retailer-protocol-card">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4759,64 +4607,40 @@ export default function App() {
                 </div>
 
                 {/* Modal Actions */}
-                <div className="dispute-modal-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingTop: 10, borderTop: '1px solid var(--border-color)' }}>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button 
-                      className="secondary-btn"
-                      onClick={() => setShowDisputeModal(false)}
-                      style={{ padding: '8px 14px' }}
-                    >
-                      Close
-                    </button>
-
-                    <a 
-                      href={`mailto:${vendorContact.support_email}?subject=${encodeURIComponent(disputeSubject)}&body=${encodeURIComponent(disputeDraft)}`}
-                      className="secondary-btn"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
-                      title="Open system default email client with recipient, subject, and body pre-filled"
-                    >
-                      <Mail size={14} /> Open in Email App
-                    </a>
-
-                    <button 
-                      className="secondary-btn"
-                      onClick={handleCopyDisputeNotice}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
-                    >
-                      {disputeCopied ? (
-                        <>
-                          <Check size={14} color="var(--google-green)" /> Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={14} /> Copy Draft
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Primary High-Impact Magic Button: Complete Loop with AI */}
+                <div className="dispute-modal-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 10, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
                   <button 
-                    className="ai-loop-btn"
-                    onClick={handleCompleteRefundLoopWithAi}
-                    disabled={isCompletingAiLoop}
-                    title={selectedRefundNextStep?.ai_loop_description || "AI automatically completes return filing, moves item to Refund Radar, and tracks statement credit."}
+                    className="secondary-btn"
+                    onClick={() => setShowDisputeModal(false)}
+                    style={{ padding: '8px 16px' }}
                   >
-                    {isCompletingAiLoop ? (
+                    Close
+                  </button>
+
+                  <a 
+                    href={`mailto:${vendorContact.support_email}?subject=${encodeURIComponent(disputeSubject)}&body=${encodeURIComponent(disputeDraft)}`}
+                    className="secondary-btn"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px' }}
+                    title="Open system default email client with recipient, subject, and body pre-filled"
+                  >
+                    <Mail size={14} /> Open in Email App
+                  </a>
+
+                  <button 
+                    className="primary-btn"
+                    onClick={handleCopyDisputeNotice}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
+                  >
+                    {disputeCopied ? (
                       <>
-                        <RefreshCw size={15} className="spin" />
-                        <span>Completing Loop with AI...</span>
+                        <Check size={14} color="#FFFFFF" /> Copied Notice!
                       </>
                     ) : (
                       <>
-                        <Sparkles size={16} fill="#FFFFFF" />
-                        <span>Complete loop with AI</span>
+                        <Copy size={14} /> Copy Draft Notice
                       </>
                     )}
                   </button>
                 </div>
-              </>
-            )}
           </div>
         </div>
       )}

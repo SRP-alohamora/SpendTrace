@@ -362,7 +362,7 @@ Once authenticated, the user is navigated directly to **Home** (Assistant & Live
     - **Total Spend:** $249.31
   - Displays the 3 North Star Product Metrics cards:
     - *Verified Refund Dollars Recovered / MAU:* $42.50 / user
-    - *User Effort per Successful Refund:* 1-Click Loop Closure
+    - *User Effort per Successful Refund:* Verified Dispute Draft
     - *False Refund Opportunity Rate:* 0.0% (High-precision guardrails)
 * **Left Pane (40% width): Conversational Agent Console**
   - Clean white thread timeline with subtle message bubbles (User: `#F1F3F4`, Agent: transparent with `#1A73E8` icon).
@@ -378,7 +378,7 @@ Once authenticated, the user is navigated directly to **Home** (Assistant & Live
 * Sparse, kanban-style lifecycle columns on a clean white canvas:
   `1. Opportunities Identified` $\rightarrow$ `2. Return Prepared / Drafted` $\rightarrow$ `3. Awaiting Bank Credit` $\rightarrow$ `4. Reconciled / Recovered` $\rightarrow$ `5. Overdue (>10 Days)`.
 * Merchant policy grounding (e.g., Marshalls 30-day apparel window vs Walmart perishable exclusions).
-* Automated email dispute drafting with human-in-the-loop review and 1-click "Complete Loop with AI".
+* Automated email dispute drafting with human-in-the-loop review, verified support contacts, and direct email client dispatch.
 
 #### 6.2.3 Tab 5: Evals (Thoughtful Continuous Benchmark Suite)
 * Visible to all authenticated users without IAM admin barriers.
@@ -403,7 +403,7 @@ Once authenticated, the user is navigated directly to **Home** (Assistant & Live
 | Metric | Target | Measurement Method | Rationale |
 | :--- | :--- | :--- | :--- |
 | **Verified Refund Dollars Recovered per MAU** | **$\ge \$42.50$ / MAU** | Sum of ledger credits reconciled against merchant return receipts divided by active users in 30-day window. | Primary value driver distinguishing SpendTrace from passive expense recorders. |
-| **User Effort per Successful Refund** | **1-Click Loop Closure** | Median user interactions from refund detection to settlement (one-click approval). | Measures convenience and frictionless autonomous resolution. |
+| **User Effort per Successful Refund** | **Verified Dispute Draft** | Tailored dispute notice and verified merchant support contact for human review and 1-click copy/email. | Empowers user with authoritative merchant-grounded dispute letters without erroneous autonomous submissions. |
 | **False Refund Opportunity Rate** | **$0.0\%$** | Number of invalid/ineligible refund suggestions divided by total suggested opportunities (Precision $\ge 95\%$). | Protects user trust by preventing fruitless merchant disputes. |
 
 ### 7.2 Technical & Operational Acceptance Criteria
