@@ -4224,6 +4224,36 @@ export default function App() {
               </div>
             </div>
 
+            {/* Guest Disclaimer Banner */}
+            {currentUser?.role === 'guest' && (
+              <div className="guest-disclaimer-banner">
+                <div className="guest-disclaimer-content">
+                  <div className="guest-disclaimer-icon">
+                    <Info size={18} />
+                  </div>
+                  <div>
+                    <div className="guest-disclaimer-title">
+                      <span>Demo Sample Evaluation Suite (Guest Preview Mode)</span>
+                    </div>
+                    <div className="guest-disclaimer-text">
+                      You are viewing demo sample evaluation data across benchmark purchases. For the real experience with your live transactions, custom models, and ground truth assertions, please <strong>create an account and log in</strong>. Your feedback is highly appreciated as we build autonomous purchase intelligence!
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="guest-disclaimer-btn"
+                  onClick={() => {
+                    setShowAuthModal(true);
+                    setAuthTab('signup');
+                  }}
+                >
+                  <UserCheck size={14} />
+                  <span>Create Account &amp; Log In</span>
+                </button>
+              </div>
+            )}
+
             {evalRunFeedback && (
               <div style={{ background: 'rgba(26,115,232,0.08)', border: '1px solid rgba(26,115,232,0.25)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: 'var(--google-blue)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <CheckCircle2 size={16} />
@@ -4970,6 +5000,36 @@ export default function App() {
                 <RefreshCw size={14} /> Refresh Traces
               </button>
             </div>
+
+            {/* Guest Disclaimer Banner */}
+            {currentUser?.role === 'guest' && (
+              <div className="guest-disclaimer-banner">
+                <div className="guest-disclaimer-content">
+                  <div className="guest-disclaimer-icon">
+                    <Info size={18} />
+                  </div>
+                  <div>
+                    <div className="guest-disclaimer-title">
+                      <span>Demo Sample Trace Telemetry (Guest Preview Mode)</span>
+                    </div>
+                    <div className="guest-disclaimer-text">
+                      You are viewing demo sample distributed trace telemetry and contract provenance. For the real experience with your live multi-step refund message exchanges and OpenTelemetry spans, please <strong>create an account and log in</strong>. Your feedback is highly appreciated as we build autonomous purchase intelligence!
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="guest-disclaimer-btn"
+                  onClick={() => {
+                    setShowAuthModal(true);
+                    setAuthTab('signup');
+                  }}
+                >
+                  <UserCheck size={14} />
+                  <span>Create Account &amp; Log In</span>
+                </button>
+              </div>
+            )}
 
             {/* Refund Audit Overview Banner */}
             {selectedTrace && (selectedTrace.input_type === 'refund_loop' || selectedTrace.action_type === 'refund_loop') && (

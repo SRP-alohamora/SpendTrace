@@ -2793,5 +2793,78 @@ input, textarea, select {
   border-radius: 4px;
 }
 
+/* Guest Disclaimer Banner for Evals & Trace Tabs */
+.guest-disclaimer-banner {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FFFBEB 50%, #F0FDF4 100%);
+  border: 1.5px solid #FCD34D;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.08);
+}
+
+.guest-disclaimer-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.guest-disclaimer-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(217, 119, 6, 0.15);
+  color: #B45309;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.guest-disclaimer-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #92400E;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.guest-disclaimer-text {
+  font-size: 12.5px;
+  color: #78350F;
+  line-height: 1.5;
+}
+
+.guest-disclaimer-btn {
+  background: #1E40AF;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.25);
+  flex-shrink: 0;
+}
+
+.guest-disclaimer-btn:hover {
+  background: #1D4ED8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(30, 64, 175, 0.35);
+}
+
 
 
