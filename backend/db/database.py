@@ -230,11 +230,13 @@ def seed_admin_demo_data(conn):
     row = cur.fetchone()
     count = row["count"] if row else 0
     if count > 0:
-        # Keep relative dates fresh so deduplication & refund radar benchmark tests never expire
-        today = date.today()
-        cur.execute("UPDATE transactions SET date = ?, posted_date = ? WHERE user_id = ? AND merchant_clean = 'Blue Bottle Coffee' AND source = 'manual_chat'",
-                    (str(today - timedelta(days=1)), str(today - timedelta(days=1)), DEMO_ADMIN_ID))
-        conn.commit()
+        try:
+            today = date.today()
+            cur.execute("UPDATE transactions SET date = ?, posted_date = ? WHERE user_id = ? AND merchant_clean = 'Blue Bottle Coffee' AND source = 'manual_chat'",
+                        (str(today - timedelta(days=1)), str(today - timedelta(days=1)), DEMO_ADMIN_ID))
+            conn.commit()
+        except Exception as lock_err:
+            pass
         return
 
     # Default accounts for demo admin
