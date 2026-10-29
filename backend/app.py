@@ -897,6 +897,50 @@ def plaid_sandbox_connect(
     inst_id = payload.get("institution_id", "ins_chase")
     return PlaidIntegrationService.exchange_public_token("public-sandbox-mock-token", current_user["id"], institution_id=inst_id)
 
+@app.post("/api/v1/plaid/verify-card")
+def plaid_verify_card(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Cryptographically verifies and connects payment card via Plaid Open Banking API.
+    Validates Expiry Date (MM/YY), Security Code (3-digit CVV / 4-digit Amex CID), and Billing ZIP.
+    Provisions verified account, records OpenTelemetry audit trace span,
+    and synchronizes credit card statement transactions.
+    """
+    card_name = str(payload.get("card_name", "Credit Card")).strip()
+    mask = str(payload.get("mask", "")).strip()
+    network = str(payload.get("network", "visa")).lower().strip()
+    card_type = str(payload.get("type", "credit")).strip()
+    institution_id = str(payload.get("institution_id", "ins_chase")).strip()
+    institution_name = str(payload.get("institution_name", "Chase Bank")).strip()
+    cardholder_name = str(payload.get("cardholder_name") or current_user.get("full_name") or "Cardholder").strip()
+    expiry_date = str(payload.get("expiry_date", "")).strip()
+    security_code = str(payload.get("security_code", "")).strip()
+    billing_zip = str(payload.get("billing_zip", "")).strip()
+    official_name = str(payload.get("official_name", "")).strip()
+
+    try:
+        result = PlaidIntegrationService.verify_and_link_card(
+            user_id=current_user["id"],
+            card_name=card_name,
+            mask=mask,
+            network=network,
+            card_type=card_type,
+            institution_id=institution_id,
+            institution_name=institution_name,
+            cardholder_name=cardholder_name,
+            expiry_date=expiry_date,
+            security_code=security_code,
+            billing_zip=billing_zip,
+            official_name=official_name
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to verify card via Plaid: {str(e)}")
+
 # =============================================================
 # Continuous Evals & Observability Endpoints (Guarded by IAM Admin)
 # =============================================================

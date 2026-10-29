@@ -144,3 +144,53 @@ def test_plaid_transactions_sync_with_intelligent_categorization():
     assert "Apparel" in categories        # From Marshalls in Plaid feed
     assert "Groceries" in categories      # From Walmart in Plaid feed
     assert "Credit Card Payment" in categories # From Chase Autopay in Plaid feed
+
+def test_plaid_verify_chase_sapphire_3645():
+    """Verify cryptographically validating and connecting Chase Sapphire ending in 3645."""
+    payload = {
+        "card_name": "Chase Sapphire Preferred",
+        "official_name": "Chase Sapphire Preferred Visa Signature",
+        "mask": "3645",
+        "network": "visa",
+        "type": "credit",
+        "institution_id": "ins_chase",
+        "institution_name": "Chase Bank",
+        "cardholder_name": "Shivani Pradhan",
+        "expiry_date": "08/29",
+        "security_code": "834",
+        "billing_zip": "94107"
+    }
+    res = client.post("/api/v1/plaid/verify-card", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["verified"] is True
+    assert data["status"] == "connected"
+    assert "trace_id" in data
+    assert data["account"]["mask"] == "3645"
+    assert data["account"]["institution_name"] == "Chase Bank"
+    assert data["account"]["limit"] == 15000.00
+    assert len(data["transactions"]) == 4
+
+def test_plaid_verify_card_invalid_cvv_or_expiry_rejected():
+    """Verify invalid CVV or expired date triggers rejection."""
+    # Invalid CVV (2 digits instead of 3 for Visa)
+    res_bad_cvv = client.post("/api/v1/plaid/verify-card", json={
+        "card_name": "Chase Sapphire",
+        "mask": "3645",
+        "network": "visa",
+        "security_code": "83",
+        "expiry_date": "08/29"
+    })
+    assert res_bad_cvv.status_code == 400
+    assert "security code" in res_bad_cvv.json()["detail"].lower()
+
+    # Expired date
+    res_expired = client.post("/api/v1/plaid/verify-card", json={
+        "card_name": "Chase Sapphire",
+        "mask": "3645",
+        "network": "visa",
+        "security_code": "834",
+        "expiry_date": "01/22"
+    })
+    assert res_expired.status_code == 400
+    assert "expired" in res_expired.json()["detail"].lower()
