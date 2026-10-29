@@ -1090,28 +1090,6 @@ export default function App() {
     }
   };
 
-  // Toggle Role between Admin and Member
-  const handleSwitchRole = async (targetRole: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/switch-role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ role: targetRole })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentUser(data.user);
-        if (data.access_token) {
-          setAuthToken(data.access_token);
-        }
-      } else {
-        setCurrentUser(prev => prev ? { ...prev, role: targetRole } : null);
-      }
-    } catch (e) {
-      setCurrentUser(prev => prev ? { ...prev, role: targetRole } : null);
-    }
-    setShowUserDropdown(false);
-  };
 
   // Client-side simulated CSV master ledger export for Demo Admin and users
   const handleExportCsv = () => {
@@ -2438,17 +2416,6 @@ export default function App() {
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Access all evals & observability</div>
                   </div>
                   {currentUser?.email === 'admin@spendtrace.ai' && <CheckCircle2 size={16} color="var(--google-green)" />}
-                </div>
-
-                <div 
-                  className="user-menu-item" 
-                  onClick={() => handleSwitchRole(currentUser?.role === 'admin' ? 'member' : 'admin')}
-                >
-                  <div>
-                    <strong>Toggle IAM Role</strong>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Currently: {currentUser?.role?.toUpperCase()} (Click to switch)</div>
-                  </div>
-                  <Key size={14} color="var(--google-blue)" />
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--border-color)', margin: '4px 0' }} />
