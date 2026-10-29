@@ -35,7 +35,8 @@ import {
   RotateCcw,
   CheckCircle,
   Plus,
-  Settings
+  Settings,
+  FastForward
 } from 'lucide-react';
 
 import spendtraceFrontpageImg from './assets/spendtrace_frontpage.jpg';
@@ -82,7 +83,10 @@ import {
   LONG_TERM_AMBITIOUS_EVALS,
   getSpendingAnalysisForWindow,
   FOUR_CORE_BENCHMARK_TRANSACTIONS,
-  type ConcreteEvalScenario
+  type ConcreteEvalScenario,
+  generateResolutionTimeline,
+  advanceRefundClaimTimeline,
+  type RefundClaimProgress
 } from './lib/mockService';
 
 const API_BASE = '/api/v1';
@@ -150,6 +154,24 @@ export default function App() {
   const [vendorContact, setVendorContact] = useState<VendorSupportInfo | null>(null);
   const [selectedRefundNextStep, setSelectedRefundNextStep] = useState<RetailerNextStepInfo | null>(null);
   const [disputeCopied, setDisputeCopied] = useState(false);
+
+  // Multi-Step Resolution Timeline State (Tracks realistic time-delayed steps & on-demand advancement)
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [selectedClaimProgress, setSelectedClaimProgress] = useState<RefundClaimProgress | null>(null);
+  const [isAdvancingStep, setIsAdvancingStep] = useState(false);
+  const [claimsProgressMap, setClaimsProgressMap] = useState<Record<string, RefundClaimProgress>>(() => {
+    const ogClaim = generateResolutionTimeline(
+      "Olive Garden",
+      46.70,
+      "Tour of Italy & Soup/Salad Dinner",
+      "OG-RET-74921-ST"
+    );
+    return {
+      "radar_row_1": ogClaim,
+      "OG-RET-74921-ST": ogClaim,
+      "Olive Garden": ogClaim
+    };
+  });
 
   // Evals State
   const [isEvalRunning, setIsEvalRunning] = useState(false);
@@ -918,6 +940,165 @@ export default function App() {
     navigator.clipboard.writeText(fullText);
     setDisputeCopied(true);
     setTimeout(() => setDisputeCopied(false), 2500);
+  };
+
+  // File refund claim / complaint from dispute modal and track multi-step resolution
+  const handleOpenFileClaimFromDispute = async (refund: any) => {
+    const mName = refund.merchant_name || refund.merchant || 'Olive Garden';
+    const amt = Math.abs(Number(refund.expected_amount || refund.amount || 46.70));
+    const desc = refund.item_description || 'Merchandise';
+    const key = refund.id || mName;
+
+    let claimProgress = claimsProgressMap[key] || claimsProgressMap[mName] || generateResolutionTimeline(mName, amt, desc);
+
+    // Attempt backend API registration if available
+    try {
+      const res = await fetch(`${API_BASE}/refunds/complete-loop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          merchant_name: mName,
+          amount: amt,
+          item_description: desc,
+          action_type: 'dispute'
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.timeline_steps) {
+          claimProgress = {
+            claim_code: data.claim_code,
+            merchant_name: mName,
+            item_description: desc,
+            amount: amt,
+            current_step: data.current_step || 2,
+            radar_column: data.radar_column || 'awaiting_credit',
+            settlement_deadline: data.settlement_deadline,
+            status_headline: `Complaint Confirmed by ${mName} — Awaiting Next Business Window Response`,
+            steps: data.timeline_steps
+          };
+        }
+      }
+    } catch (e) {
+      // Offline / client fallback
+    }
+
+    setClaimsProgressMap(prev => ({
+      ...prev,
+      [key]: claimProgress,
+      [mName]: claimProgress,
+      [claimProgress.claim_code]: claimProgress
+    }));
+
+    // Update refunds array to reflect filed claim on Refund Radar
+    setRefunds(prev => {
+      const exists = prev.some(r => r.merchant_name === mName || r.claim_code === claimProgress.claim_code);
+      if (exists) {
+        return prev.map(r => r.merchant_name === mName ? { ...r, claim_code: claimProgress.claim_code, status: 'awaiting_credit' } : r);
+      }
+      return [
+        {
+          id: `ref_${Date.now()}`,
+          merchant_name: mName,
+          expected_amount: amt,
+          status: 'awaiting_credit',
+          return_date: new Date().toISOString().split('T')[0],
+          deadline_date: claimProgress.settlement_deadline,
+          claim_code: claimProgress.claim_code,
+          item_description: desc,
+          notes: `Complaint filed and confirmed by ${mName}. Tracking resolution steps.`
+        },
+        ...prev
+      ];
+    });
+
+    setSelectedClaimProgress(claimProgress);
+    setShowDisputeModal(false);
+    setShowTimelineModal(true);
+  };
+
+  // Advance resolution timeline on demand (simulate next business window response or bank credit)
+  const handleAdvanceTimelineStep = async (targetStep: number) => {
+    if (!selectedClaimProgress) return;
+    setIsAdvancingStep(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/refunds/advance-timeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          claim_code: selectedClaimProgress.claim_code,
+          target_step: targetStep,
+          merchant_name: selectedClaimProgress.merchant_name,
+          amount: selectedClaimProgress.amount,
+          item_description: selectedClaimProgress.item_description
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated: RefundClaimProgress = {
+          ...selectedClaimProgress,
+          current_step: data.current_step,
+          status_headline: data.status_headline,
+          radar_column: targetStep >= 4 ? 'closed' : 'awaiting_credit',
+          steps: data.timeline_steps
+        };
+        setSelectedClaimProgress(updated);
+        setClaimsProgressMap(prev => ({
+          ...prev,
+          [selectedClaimProgress.merchant_name]: updated,
+          [selectedClaimProgress.claim_code]: updated
+        }));
+        setIsAdvancingStep(false);
+        return;
+      }
+    } catch (e) {
+      // Offline fallback
+    }
+
+    const updated = advanceRefundClaimTimeline(selectedClaimProgress, targetStep);
+    setSelectedClaimProgress(updated);
+    setClaimsProgressMap(prev => ({
+      ...prev,
+      [selectedClaimProgress.merchant_name]: updated,
+      [selectedClaimProgress.claim_code]: updated
+    }));
+    setIsAdvancingStep(false);
+  };
+
+  // Reset timeline simulation on demand
+  const handleResetTimelineSimulation = () => {
+    if (!selectedClaimProgress) return;
+    const fresh = generateResolutionTimeline(
+      selectedClaimProgress.merchant_name,
+      selectedClaimProgress.amount,
+      selectedClaimProgress.item_description,
+      selectedClaimProgress.claim_code
+    );
+    setSelectedClaimProgress(fresh);
+    setClaimsProgressMap(prev => ({
+      ...prev,
+      [selectedClaimProgress.merchant_name]: fresh,
+      [selectedClaimProgress.claim_code]: fresh
+    }));
+  };
+
+  // Open timeline modal for a purchase or claim
+  const handleOpenTimelineForPurchase = (purchase: any) => {
+    const mName = purchase.merchant_name || purchase.merchant || 'Olive Garden';
+    const key = purchase.id || mName;
+    let claim = claimsProgressMap[key] || claimsProgressMap[mName] || (purchase.claim_code ? claimsProgressMap[purchase.claim_code] : undefined);
+    if (!claim) {
+      claim = generateResolutionTimeline(
+        mName,
+        purchase.amount || purchase.expected_amount || 46.70,
+        purchase.item_description || 'Merchandise',
+        purchase.claim_code
+      );
+      setClaimsProgressMap(prev => ({ ...prev, [key]: claim, [mName]: claim }));
+    }
+    setSelectedClaimProgress(claim);
+    setShowTimelineModal(true);
   };
 
   // Auth modal submit handler with password policy validation and resilient offline simulation
@@ -2795,14 +2976,37 @@ export default function App() {
                             </div>
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <button 
-                              className="refund-action-btn"
-                              onClick={() => handleOpenDisputeModal(p)}
-                              title={`Start dispute/refund for ${p.merchant_name} ($${p.amount.toFixed(2)})`}
-                            >
-                              <span>{p.action_label}</span>
-                              <ChevronRight size={14} />
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                              {claimsProgressMap[p.merchant_name] && (
+                                <button 
+                                  className="secondary-btn"
+                                  onClick={() => handleOpenTimelineForPurchase(p)}
+                                  style={{ 
+                                    padding: '5px 9px', 
+                                    fontSize: 11.5, 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: 5, 
+                                    borderColor: claimsProgressMap[p.merchant_name].current_step >= 3 ? '#BBF7D0' : '#BAE6FD', 
+                                    color: claimsProgressMap[p.merchant_name].current_step >= 3 ? '#15803D' : '#0369A1', 
+                                    background: claimsProgressMap[p.merchant_name].current_step >= 3 ? '#F0FDF4' : '#F0F9FF',
+                                    fontWeight: 600
+                                  }}
+                                  title="View multi-step resolution activity timeline with timestamps"
+                                >
+                                  <Clock size={12} />
+                                  <span>Activity (Step {claimsProgressMap[p.merchant_name].current_step}/4)</span>
+                                </button>
+                              )}
+                              <button 
+                                className="refund-action-btn"
+                                onClick={() => handleOpenDisputeModal(p)}
+                                title={`Start dispute/refund for ${p.merchant_name} ($${p.amount.toFixed(2)})`}
+                              >
+                                <span>{p.action_label}</span>
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2893,11 +3097,26 @@ export default function App() {
                   </div>
                   {refunds.map(r => (
                     <div key={r.id} className="radar-card">
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{r.merchant_name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{r.merchant_name}</span>
+                        {r.claim_code && (
+                          <span className="status-pill blue" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                            #{r.claim_code}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ color: 'var(--google-green)', fontWeight: 500, margin: '4px 0' }}>
                         ${Number(r.expected_amount).toFixed(2)}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Returned on: {r.return_date}</div>
+                      <button 
+                        className="secondary-btn"
+                        onClick={() => handleOpenTimelineForPurchase(r)}
+                        style={{ width: '100%', marginTop: 8, padding: '5px 8px', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+                        title="View sequential resolution steps with timestamps"
+                      >
+                        <Clock size={12} /> View Steps & Timestamps
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -2909,11 +3128,26 @@ export default function App() {
                   </div>
                   {refunds.filter(r => r.status === 'awaiting_credit').map(r => (
                     <div key={r.id} className="radar-card">
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{r.merchant_name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{r.merchant_name}</span>
+                        {r.claim_code && (
+                          <span className="status-pill blue" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                            #{r.claim_code}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ color: 'var(--google-blue)', fontWeight: 500, margin: '4px 0' }}>
                         ${Number(r.expected_amount).toFixed(2)}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Credit expected by {r.deadline_date}</div>
+                      <button 
+                        className="secondary-btn"
+                        onClick={() => handleOpenTimelineForPurchase(r)}
+                        style={{ width: '100%', marginTop: 8, padding: '5px 8px', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+                        title="View sequential resolution steps with timestamps"
+                      >
+                        <Clock size={12} /> View Steps & Timestamps
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -2935,14 +3169,25 @@ export default function App() {
                       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0' }}>
                         Return date: {r.return_date}. Settlement deadline was {r.deadline_date}.
                       </p>
-                      <button 
-                        className="dispute-btn"
-                        onClick={() => handleOpenDisputeModal(r)}
-                        title="Open customized dispute notice draft with verified vendor support contacts"
-                      >
-                        <Mail size={13} style={{ marginRight: 6 }} />
-                        Draft Dispute Notice
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                        <button 
+                          className="dispute-btn"
+                          onClick={() => handleOpenDisputeModal(r)}
+                          style={{ flex: 1 }}
+                          title="Open customized dispute notice draft with verified vendor support contacts"
+                        >
+                          <Mail size={13} style={{ marginRight: 6 }} />
+                          Draft Notice
+                        </button>
+                        <button 
+                          className="secondary-btn"
+                          onClick={() => handleOpenTimelineForPurchase(r)}
+                          style={{ padding: '6px 8px', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          title="View resolution activity timeline"
+                        >
+                          <Clock size={12} /> Steps
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -4599,13 +4844,13 @@ export default function App() {
                   </a>
 
                   <button 
-                    className="primary-btn"
+                    className="secondary-btn"
                     onClick={handleCopyDisputeNotice}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px' }}
                   >
                     {disputeCopied ? (
                       <>
-                        <Check size={14} color="#FFFFFF" /> Copied Notice!
+                        <Check size={14} color="#10B981" /> Copied Notice!
                       </>
                     ) : (
                       <>
@@ -4613,7 +4858,237 @@ export default function App() {
                       </>
                     )}
                   </button>
+
+                  <button 
+                    className="primary-btn"
+                    onClick={() => handleOpenFileClaimFromDispute(selectedRefundForDispute)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#1A73E8' }}
+                    title={`File formal complaint with ${vendorContact.canonical_name} and track realistic multi-step resolution activity with timestamps`}
+                  >
+                    <Send size={14} /> File Complaint & Track Resolution
+                  </button>
                 </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolution Activity & Step Timeline Modal */}
+      {showTimelineModal && selectedClaimProgress && (
+        <div className="auth-modal-backdrop" onClick={() => setShowTimelineModal(false)}>
+          <div className="resolution-timeline-modal-card" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ 
+                  width: 40, 
+                  height: 40, 
+                  borderRadius: 8, 
+                  background: selectedClaimProgress.merchant_name.toLowerCase().includes('olive') ? '#2D6A4F' : 'var(--google-blue)', 
+                  color: '#FFFFFF', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: 13
+                }}>
+                  {selectedClaimProgress.merchant_name.replace(/[^A-Za-z]/g, '').substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Resolution Activity — {selectedClaimProgress.merchant_name}
+                    </h3>
+                    <span className="status-pill blue" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                      #{selectedClaimProgress.claim_code}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    {selectedClaimProgress.item_description} • <strong style={{ color: 'var(--text-primary)' }}>${selectedClaimProgress.amount.toFixed(2)} USD</strong> • Expected Settlement: {selectedClaimProgress.settlement_deadline}
+                  </div>
+                </div>
+              </div>
+              <button className="close-btn" onClick={() => setShowTimelineModal(false)} title="Close Timeline">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Realistic Timeframe Explanation Notice */}
+            <div style={{ 
+              background: '#F8FAFC', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: 8, 
+              padding: '12px 16px', 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              gap: 10,
+              fontSize: 12.5,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.5
+            }}>
+              <Clock size={18} color="var(--google-blue)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <strong style={{ color: 'var(--text-primary)' }}>Realistic Resolution Schedule:</strong> Real activity takes time to hear back from {selectedClaimProgress.merchant_name}. It is not instantaneous. SpendTrace tracks each sequential phase with authentic timestamps. You can check for updates and simulate business window responses on demand below.
+              </div>
+            </div>
+
+            {/* 4-Step Stepper Header */}
+            <div className="timeline-stepper-bar">
+              <div className="timeline-stepper-line" />
+              <div 
+                className="timeline-stepper-fill" 
+                style={{ 
+                  width: selectedClaimProgress.current_step >= 4 ? 'calc(100% - 72px)' : 
+                         selectedClaimProgress.current_step === 3 ? '66%' : '33%' 
+                }} 
+              />
+              {selectedClaimProgress.steps.map((st) => (
+                <div key={st.step_number} className="timeline-step-bubble">
+                  <div className={`step-bubble-circle ${st.status}`}>
+                    {st.status === 'completed' ? <Check size={16} /> : st.step_number}
+                  </div>
+                  <div className="step-bubble-label">
+                    {st.step_number === 1 && "1. Dispatched"}
+                    {st.step_number === 2 && "2. Confirmed"}
+                    {st.step_number === 3 && "3. Merchant Resolution"}
+                    {st.step_number === 4 && "4. Bank Settlement"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sequential Steps List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {selectedClaimProgress.steps.map((step) => {
+                const isStepCompleted = step.status === 'completed';
+                const isStepWaiting = step.status === 'waiting';
+
+                return (
+                  <div key={step.step_number} className={`resolution-step-item ${step.status}`}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ 
+                          width: 28, 
+                          height: 28, 
+                          borderRadius: '50%', 
+                          background: isStepCompleted ? '#DCFCE7' : isStepWaiting ? '#FEF3C7' : '#F1F5F9',
+                          color: isStepCompleted ? '#16A34A' : isStepWaiting ? '#D97706' : '#94A3B8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          flexShrink: 0
+                        }}>
+                          {isStepCompleted ? <Check size={16} /> : step.step_number}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
+                            {step.title}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                            {step.description}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span 
+                          className={`status-pill ${isStepCompleted ? 'green' : isStepWaiting ? 'amber' : 'blue'}`}
+                          style={{ fontSize: 11, marginBottom: 4, display: 'inline-block' }}
+                        >
+                          {step.badge_label}
+                        </span>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          {step.timestamp}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Speech / Quote Box from Merchant or System */}
+                    {step.quote_box && (isStepCompleted || isStepWaiting) && (
+                      <div className={`resolution-quote-card ${step.step_number === 3 ? 'merchant-response' : 'merchant-ack'}`}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 4 }}>
+                          <span style={{ fontWeight: 600, fontSize: 11.5, color: step.step_number === 3 ? '#166534' : 'var(--google-blue)' }}>
+                            {step.quote_box.sender}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            via {step.quote_box.channel}
+                          </span>
+                        </div>
+                        <div style={{ color: 'var(--text-primary)', fontStyle: 'italic', fontSize: 12.5 }}>
+                          "{step.quote_box.message}"
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* On-Demand Simulation Control Card */}
+            <div className="resolution-ondemand-banner">
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13, color: '#0369A1' }}>
+                  <Sparkles size={16} color="var(--google-blue)" />
+                  <span>On-Demand Resolution Progression</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#0C4A6E', marginTop: 2, maxWidth: 540 }}>
+                  {selectedClaimProgress.current_step < 3 && (
+                    <span>Real-world wait: Awaiting next business morning review from {selectedClaimProgress.merchant_name}. Advance on demand to inspect resolution response.</span>
+                  )}
+                  {selectedClaimProgress.current_step === 3 && (
+                    <span>{selectedClaimProgress.merchant_name} approved the refund! Advance on demand to simulate bank statement credit detection.</span>
+                  )}
+                  {selectedClaimProgress.current_step >= 4 && (
+                    <span>All 4 phases complete. Reconciled and refund loop closed. You can reset to step 1 to test again anytime.</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {selectedClaimProgress.current_step < 3 && (
+                  <button 
+                    className="resolution-advance-btn"
+                    onClick={() => handleAdvanceTimelineStep(3)}
+                    disabled={isAdvancingStep}
+                  >
+                    <FastForward size={14} />
+                    <span>{isAdvancingStep ? 'Simulating...' : 'Simulate Response in Next Business Window'}</span>
+                  </button>
+                )}
+
+                {selectedClaimProgress.current_step === 3 && (
+                  <button 
+                    className="resolution-advance-btn"
+                    onClick={() => handleAdvanceTimelineStep(4)}
+                    disabled={isAdvancingStep}
+                    style={{ background: '#10B981' }}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>{isAdvancingStep ? 'Reconciling...' : 'Simulate Bank Statement Credit Reconciliation'}</span>
+                  </button>
+                )}
+
+                {selectedClaimProgress.current_step >= 4 && (
+                  <button 
+                    className="secondary-btn"
+                    onClick={handleResetTimelineSimulation}
+                    style={{ padding: '8px 14px', fontSize: 12.5 }}
+                  >
+                    <RotateCcw size={13} style={{ marginRight: 4 }} />
+                    Reset Simulation to Step 1
+                  </button>
+                )}
+
+                <button 
+                  className="secondary-btn"
+                  onClick={() => setShowTimelineModal(false)}
+                  style={{ padding: '8px 16px', fontSize: 12.5 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

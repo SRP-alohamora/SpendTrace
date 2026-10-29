@@ -296,4 +296,76 @@ def test_complete_refund_loop_endpoint():
     assert "WALM" in w_data["claim_code"]
     assert w_data["amount"] == 88.92
 
+def test_refund_loop_timeline_steps_and_on_demand_advancement():
+    login_res = client.post("/api/v1/auth/demo-login")
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. File refund loop for Olive Garden
+    og_res = client.post(
+        "/api/v1/refunds/complete-loop",
+        headers=headers,
+        json={
+            "merchant_name": "Olive Garden",
+            "amount": 46.70,
+            "item_description": "Tour of Italy & Soup/Salad Dinner",
+            "action_type": "dispute"
+        }
+    )
+    assert og_res.status_code == 200
+    data = og_res.json()
+    assert data["status"] == "success"
+    assert "OLIV" in data["claim_code"]
+    assert len(data["timeline_steps"]) == 4
+
+    step1 = data["timeline_steps"][0]
+    assert "Dispatched" in step1["badge_label"]
+    assert step1["status"] == "completed"
+
+    step2 = data["timeline_steps"][1]
+    assert "Confirmation received from Olive Garden on the complaint" in step2["title"]
+    assert step2["status"] == "completed"
+
+    step3 = data["timeline_steps"][2]
+    assert "Response received from Olive Garden in next business hour window confirming resolution" in step3["title"]
+    assert step3["status"] == "waiting"
+
+    # 2. Advance timeline on demand to step 3 (next business window resolution response)
+    adv_res = client.post(
+        "/api/v1/refunds/advance-timeline",
+        headers=headers,
+        json={
+            "claim_code": data["claim_code"],
+            "target_step": 3,
+            "merchant_name": "Olive Garden",
+            "amount": 46.70,
+            "item_description": "Tour of Italy & Soup/Salad Dinner"
+        }
+    )
+    assert adv_res.status_code == 200
+    adv_data = adv_res.json()
+    assert adv_data["current_step"] == 3
+    assert adv_data["timeline_steps"][2]["status"] == "completed"
+    assert adv_data["timeline_steps"][3]["status"] == "waiting"
+
+    # 3. Advance timeline on demand to step 4 (bank settlement)
+    adv_res2 = client.post(
+        "/api/v1/refunds/advance-timeline",
+        headers=headers,
+        json={
+            "claim_code": data["claim_code"],
+            "target_step": 4,
+            "merchant_name": "Olive Garden",
+            "amount": 46.70,
+            "item_description": "Tour of Italy & Soup/Salad Dinner"
+        }
+    )
+    assert adv_res2.status_code == 200
+    adv_data2 = adv_res2.json()
+    assert adv_data2["current_step"] == 4
+    assert adv_data2["timeline_steps"][3]["status"] == "completed"
+    assert "Reconciled" in adv_data2["status_headline"]
+
+
 
