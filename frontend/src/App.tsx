@@ -43,6 +43,8 @@ import {
 
 import spendtraceFrontpageImg from './assets/spendtrace_frontpage.jpg';
 import spendtraceRefundRadarImg from './assets/spendtrace_refund_radar.jpg';
+import spendtraceLogoImg from './assets/spendtrace_logo.png';
+import spendtraceIconImg from './assets/spendtrace_icon.png';
 
 import { 
   isGitHubPagesDeployment, 
@@ -2059,8 +2061,13 @@ export default function App() {
           <div className="login-auth-card">
             {/* Header */}
             <div className="login-auth-header">
-              <div className="brand-logo" style={{ fontSize: '28px', justifyContent: 'center' }}>
-                SpendTrace<span className="dot">•</span>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                <img 
+                  src={spendtraceLogoImg} 
+                  alt="SpendTrace" 
+                  className="brand-logo-img large"
+                  style={{ maxHeight: 54 }}
+                />
               </div>
               <div className="login-hero-tagline">
                 Autonomous Purchase Intelligence & Refund Concierge
@@ -2279,8 +2286,13 @@ export default function App() {
       {/* Google Workspace Style Header */}
       <header className="top-nav">
         <div className="brand-section">
-          <div className="brand-logo" onClick={() => setActiveTab('home')} style={{ cursor: 'pointer' }}>
-            SpendTrace<span className="dot">•</span>
+          <div className="brand-logo" onClick={() => setActiveTab('home')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <img 
+              src={spendtraceLogoImg} 
+              alt="SpendTrace" 
+              className="brand-logo-img"
+              style={{ maxHeight: 32 }}
+            />
           </div>
         </div>
 
@@ -2727,7 +2739,11 @@ export default function App() {
                   <div key={idx} className={`message-bubble ${m.sender}`}>
                     {m.sender === 'agent' && (
                       <div className="agent-header">
-                        <Bot size={14} />
+                        <img 
+                          src={spendtraceIconImg} 
+                          alt="SpendTrace" 
+                          style={{ width: 16, height: 16, borderRadius: 3, objectFit: 'contain' }} 
+                        />
                         <span>SpendTrace Agent</span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.timestamp}</span>
                       </div>
@@ -6960,8 +6976,12 @@ export default function App() {
       {showGuestCardAckModal && (
         <div className="modal-overlay" onClick={() => setShowGuestCardAckModal(false)}>
           <div className="modal-content guest-card-ack-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540, textAlign: 'center', padding: '32px 28px' }}>
-            <div style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(37, 99, 235, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', color: 'var(--google-blue)' }}>
-              <CreditCard size={32} />
+            <div style={{ width: 64, height: 64, borderRadius: 14, overflow: 'hidden', margin: '0 auto 16px auto', boxShadow: '0 4px 14px rgba(17, 122, 202, 0.2)' }}>
+              <img 
+                src={spendtraceIconImg} 
+                alt="SpendTrace" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
             </div>
             
             <h2 style={{ fontSize: 21, fontWeight: 700, margin: '0 0 10px 0', color: 'var(--text-primary)' }}>

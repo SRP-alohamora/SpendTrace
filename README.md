@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/spendtrace_logo.png" alt="SpendTrace Logo" width="480" />
+</p>
+
 # SpendTrace — AI Expense and Purchase Intelligence Agent
 
 > **"Never lose money to forgotten returns or mystery charges again."**

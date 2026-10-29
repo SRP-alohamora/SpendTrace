@@ -117,6 +117,21 @@ input, textarea, select {
   letter-spacing: -0.2px;
 }
 
+.brand-logo-img {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-logo-img.large {
+  height: 52px;
+}
+
+.brand-logo-img.hero {
+  height: 44px;
+}
+
 .brand-logo span.dot {
   color: var(--google-blue);
   font-size: 24px;
