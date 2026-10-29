@@ -192,19 +192,7 @@ export default function App() {
   const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [selectedClaimProgress, setSelectedClaimProgress] = useState<RefundClaimProgress | null>(null);
   const [isAdvancingStep, setIsAdvancingStep] = useState(false);
-  const [claimsProgressMap, setClaimsProgressMap] = useState<Record<string, RefundClaimProgress>>(() => {
-    const ogClaim = generateResolutionTimeline(
-      "Olive Garden",
-      46.70,
-      "Tour of Italy & Soup/Salad Dinner",
-      "OG-RET-74921-ST"
-    );
-    return {
-      "radar_row_1": ogClaim,
-      "OG-RET-74921-ST": ogClaim,
-      "Olive Garden": ogClaim
-    };
-  });
+  const [claimsProgressMap, setClaimsProgressMap] = useState<Record<string, RefundClaimProgress>>({});
 
   // Evals State
   const [isEvalRunning, setIsEvalRunning] = useState(false);
@@ -263,6 +251,8 @@ export default function App() {
   const [plaidSetupError, setPlaidSetupError] = useState('');
   const [plaidIsVerifying, setPlaidIsVerifying] = useState(false);
   const [plaidVerifyStep, setPlaidVerifyStep] = useState(0);
+  const [showGuestCardAckModal, setShowGuestCardAckModal] = useState(false);
+  const [guestCardAckInfo, setGuestCardAckInfo] = useState<{ name: string; mask: string; institution: string } | null>(null);
 
   // Mint / Credit Karma Playground State
   const [compMerchant, setCompMerchant] = useState('Marshalls');
@@ -293,11 +283,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentUser.role !== 'guest') {
       localStorage.setItem('spendtrace_user', JSON.stringify(currentUser));
-    }
-    if (authToken) {
-      localStorage.setItem('spendtrace_token', authToken);
+      if (authToken) {
+        localStorage.setItem('spendtrace_token', authToken);
+      }
+    } else {
+      localStorage.removeItem('spendtrace_user');
+      localStorage.removeItem('spendtrace_token');
     }
     fetchLedger();
     fetchRefunds();
@@ -312,13 +305,18 @@ export default function App() {
   }, [messages]);
 
   const fetchLedger = async () => {
+    if (currentUser?.role === 'guest') {
+      // Guest users strictly have an in-memory clean slate; no saved ledger to fetch
+      return;
+    }
     if (!isDemoAdmin) {
+      if (!authToken) return;
       // Non-demo users build their ledger dynamically; do NOT inject demo transactions
       try {
         const res = await fetch(`${API_BASE}/transactions?limit=100`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
-          if (data.transactions && data.transactions.length > 0) {
+          if (data.transactions && data.user_id === currentUser?.id) {
             setTransactions(data.transactions);
           }
         }
@@ -336,13 +334,21 @@ export default function App() {
   };
 
   const fetchRefunds = async () => {
+    if (currentUser?.role === 'guest') {
+      // Guest users strictly have zero return radar items
+      setRefunds([]);
+      return;
+    }
     if (!isDemoAdmin) {
+      if (!authToken) return;
       // Non-demo users do not see demo return radar items
       try {
         const res = await fetch(`${API_BASE}/refunds/radar`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
-          if (data.refunds) setRefunds(data.refunds);
+          if (data.refunds && data.user_id === currentUser?.id) {
+            setRefunds(data.refunds);
+          }
         }
       } catch (e) {}
       return;
@@ -425,6 +431,32 @@ export default function App() {
   };
 
   const fetchPlaidAccounts = async () => {
+    if (currentUser?.role === 'guest') {
+      // Guest users strictly start with NO pre-configured cards
+      return;
+    }
+    if (!isDemoAdmin) {
+      if (!authToken) {
+        setPlaidData(EMPTY_PLAID_DATA);
+        return;
+      }
+      setPlaidLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/plaid/accounts`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setPlaidData(data);
+        } else {
+          setPlaidData(EMPTY_PLAID_DATA);
+        }
+      } catch (e) {
+        setPlaidData(EMPTY_PLAID_DATA);
+      } finally {
+        setPlaidLoading(false);
+      }
+      return;
+    }
+    // Only Demo Admin receives MOCK_PLAID_DATA
     setPlaidLoading(true);
     try {
       const res = await fetch(`${API_BASE}/plaid/accounts`, { headers: getAuthHeaders() });
@@ -439,6 +471,11 @@ export default function App() {
   };
 
   const handlePlaidSync = async () => {
+    if (currentUser?.role === 'guest') {
+      setPlaidNotification("Guest Mode: Use 'Link New Card' to configure and test credit card correlation.");
+      setTimeout(() => setPlaidNotification(''), 4000);
+      return;
+    }
     setPlaidLoading(true);
     setPlaidNotification('');
     try {
@@ -456,9 +493,13 @@ export default function App() {
       throw new Error("PlaidFallback");
     } catch (e) {
       // GitHub Pages / offline simulation
-      await new Promise(r => setTimeout(r, 800));
-      setTransactions(prev => [...MOCK_PLAID_SYNCED_TRANSACTIONS, ...prev]);
-      setPlaidNotification(`Plaid Sync Complete: 4 transactions imported and categorized. Note: Chase Autopay ($450) was detected as 'Credit Card Payment' and excluded from monthly spend calculation.`);
+      if (isDemoAdmin) {
+        await new Promise(r => setTimeout(r, 800));
+        setTransactions(prev => [...MOCK_PLAID_SYNCED_TRANSACTIONS, ...prev]);
+        setPlaidNotification(`Plaid Sync Complete: 4 transactions imported and categorized. Note: Chase Autopay ($450) was detected as 'Credit Card Payment' and excluded from monthly spend calculation.`);
+      } else {
+        setPlaidNotification("Sync complete: No external connected institutions found. Use 'Link New Card' to configure credit cards.");
+      }
     } finally {
       setPlaidLoading(false);
     }
@@ -652,6 +693,23 @@ export default function App() {
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               }
             ]);
+
+            if (currentUser?.role === 'guest') {
+              setGuestCardAckInfo({
+                name: updatedCard.name,
+                mask: updatedCard.mask,
+                institution: updatedCard.plaid_institution || 'Financial Institution'
+              });
+              setShowGuestCardAckModal(true);
+              setMessages(prev => [
+                ...prev,
+                {
+                  sender: 'agent' as const,
+                  text: `🙏 **Thank You for Testing SpendTrace!** You successfully linked **${updatedCard.name} (...${updatedCard.mask})** in Guest Preview mode. To experience our real end-to-end UX, link live institutional bank feeds, and permanently save your financial records, please **create an account and log in**. Your feedback is highly appreciated as we build autonomous purchase intelligence!`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              ]);
+            }
 
             setPlaidNotification(`Card ${updatedCard.name} (ending in ${updatedCard.mask}) linked! Synced 4 statement charges to your Master Ledger.`);
             setTimeout(() => setPlaidNotification(''), 4500);
@@ -883,6 +941,17 @@ export default function App() {
       setRefunds(MOCK_REFUNDS);
       setPlaidData(MOCK_PLAID_DATA);
       setTraces(MOCK_TRACES);
+      const ogClaim = generateResolutionTimeline(
+        "Olive Garden",
+        46.70,
+        "Tour of Italy & Soup/Salad Dinner",
+        "OG-RET-74921-ST"
+      );
+      setClaimsProgressMap({
+        "radar_row_1": ogClaim,
+        "OG-RET-74921-ST": ogClaim,
+        "Olive Garden": ogClaim
+      });
       setAuthLoading(false);
       setAuthSuccessMessage("Logged in as Demo Admin (admin@spendtrace.ai) • Rich benchmark ledger & Plaid cards loaded");
       setTimeout(() => setAuthSuccessMessage(''), 3000);
@@ -968,6 +1037,7 @@ export default function App() {
     setTransactions([]);
     setRefunds([]);
     setPlaidData(EMPTY_PLAID_DATA);
+    setClaimsProgressMap({});
     setTraces([]);
     setActiveTab('home');
     setMessages(prev => [
@@ -1045,7 +1115,7 @@ export default function App() {
 
   // Client-side simulated CSV master ledger export for Demo Admin and users
   const handleExportCsv = () => {
-    const txsToExport = transactions.length > 0 ? transactions : MOCK_BENCHMARK_TRANSACTIONS;
+    const txsToExport = transactions.length > 0 ? transactions : (isDemoAdmin ? MOCK_BENCHMARK_TRANSACTIONS : []);
     const csvContent = generateMasterLedgerCsv(txsToExport);
     const filename = `spendtrace_master_ledger_${currentUser?.role === 'admin' ? 'demo_admin' : (currentUser?.email?.split('@')[0] || 'account')}.csv`;
     downloadCsvLocally(filename, csvContent);
@@ -1543,6 +1613,9 @@ export default function App() {
   const handleGuestLogin = async () => {
     setAuthLoading(true);
     setAuthError('');
+    setIsDemoAdmin(false);
+    localStorage.removeItem('spendtrace_user');
+    localStorage.removeItem('spendtrace_token');
     try {
       const res = await fetch(`${API_BASE}/auth/guest-login`, {
         method: 'POST',
@@ -1550,6 +1623,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok) {
+        setIsDemoAdmin(false);
         setCurrentUser(data.user);
         setAuthToken(data.access_token);
         setShowAuthModal(false);
@@ -1557,11 +1631,13 @@ export default function App() {
         setTransactions([]);
         setRefunds([]);
         setPlaidData(EMPTY_PLAID_DATA);
+        setClaimsProgressMap({});
         setActiveTab('home');
         return;
       }
       throw new Error("GuestFallback");
     } catch (e: any) {
+      setIsDemoAdmin(false);
       const result = mockGuestLogin();
       setCurrentUser(result.user);
       setAuthToken(result.access_token);
@@ -1570,6 +1646,7 @@ export default function App() {
       setTransactions([]);
       setRefunds([]);
       setPlaidData(EMPTY_PLAID_DATA);
+      setClaimsProgressMap({});
       setActiveTab('home');
     } finally {
       setAuthLoading(false);
@@ -2917,10 +2994,10 @@ export default function App() {
                 <div className="summary-card">
                   <div className="label">Credit Card Debt</div>
                   <div className="value" style={{ color: '#4338CA' }}>
-                    ${Number(plaidData?.liabilities_summary?.total_credit_debt || 4120.45).toFixed(2)}
+                    ${Number(plaidData?.liabilities_summary?.total_credit_debt || 0).toFixed(2)}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Util: {plaidData?.liabilities_summary?.aggregate_utilization_pct || 11.8}% (Healthy)
+                    {plaidData?.accounts?.length ? `Util: ${plaidData?.liabilities_summary?.aggregate_utilization_pct || 0}% (Healthy)` : 'No cards linked'}
                   </div>
                 </div>
                 <div className="summary-card">
@@ -3569,49 +3646,49 @@ export default function App() {
               <div className="liability-card">
                 <div className="card-title">Total Credit Card Debt</div>
                 <div className="card-value" style={{ color: '#4338CA' }}>
-                  ${Number(plaidData?.liabilities_summary?.total_credit_debt || 4120.45).toFixed(2)}
+                  ${Number(plaidData?.liabilities_summary?.total_credit_debt || 0).toFixed(2)}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Across {plaidData?.accounts?.filter((a: any) => a.type === 'credit')?.length || 3} revolving credit lines
+                  Across {plaidData?.accounts?.filter((a: any) => a.type === 'credit')?.length || 0} revolving credit lines
                 </div>
               </div>
 
               <div className="liability-card">
                 <div className="card-title">Total Credit Limit</div>
                 <div className="card-value" style={{ color: 'var(--text-primary)' }}>
-                  ${Number(plaidData?.liabilities_summary?.total_credit_limit || 35000.00).toFixed(2)}
+                  ${Number(plaidData?.liabilities_summary?.total_credit_limit || 0).toFixed(2)}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Available purchasing power
+                  {plaidData?.accounts?.length ? 'Available purchasing power' : 'No credit lines active'}
                 </div>
               </div>
 
               <div className="liability-card">
                 <div className="card-title">Credit Utilization Rate</div>
                 <div className="card-value" style={{ color: 'var(--google-green)' }}>
-                  {plaidData?.liabilities_summary?.aggregate_utilization_pct || 11.8}%
+                  {plaidData?.liabilities_summary?.aggregate_utilization_pct !== undefined ? plaidData.liabilities_summary.aggregate_utilization_pct : 0}%
                 </div>
                 <div className="utilization-bar-container">
                   <div 
                     className="utilization-bar-fill" 
                     style={{ 
-                      width: `${Math.min(100, plaidData?.liabilities_summary?.aggregate_utilization_pct || 11.8)}%`,
+                      width: `${Math.min(100, plaidData?.liabilities_summary?.aggregate_utilization_pct || 0)}%`,
                       backgroundColor: 'var(--google-green)'
                     }} 
                   />
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Healthy (&lt; 30% FICO threshold)
+                  {plaidData?.accounts?.length ? 'Healthy (< 30% FICO threshold)' : 'No credit utilization'}
                 </div>
               </div>
 
               <div className="liability-card">
                 <div className="card-title">Next Minimum Due</div>
                 <div className="card-value" style={{ color: 'var(--google-amber)' }}>
-                  ${Number(plaidData?.liabilities_summary?.total_minimum_payment_due || 140.00).toFixed(2)}
+                  ${Number(plaidData?.liabilities_summary?.total_minimum_payment_due || 0).toFixed(2)}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Due Date: <strong>{plaidData?.liabilities_summary?.next_due_date || 'Nov 15, 2026'}</strong>
+                  Due Date: <strong>{plaidData?.liabilities_summary?.next_due_date || (plaidData?.accounts?.length ? 'Due in 21 days' : 'No due date')}</strong>
                 </div>
               </div>
             </div>
@@ -6720,6 +6797,61 @@ export default function App() {
                   {plaidIsVerifying ? "Verifying with Plaid..." : (editingPlaidAccount ? "Save & Verify Changes" : "Verify & Link Card")}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guest Card Added Acknowledgement Modal */}
+      {showGuestCardAckModal && (
+        <div className="modal-overlay" onClick={() => setShowGuestCardAckModal(false)}>
+          <div className="modal-content guest-card-ack-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540, textAlign: 'center', padding: '32px 28px' }}>
+            <div style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(37, 99, 235, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', color: 'var(--google-blue)' }}>
+              <CreditCard size={32} />
+            </div>
+            
+            <h2 style={{ fontSize: 21, fontWeight: 700, margin: '0 0 10px 0', color: 'var(--text-primary)' }}>
+              Card Added in Guest Preview Mode
+            </h2>
+            
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 18px 0' }}>
+              You've successfully connected <strong>{guestCardAckInfo?.name} (ending in {guestCardAckInfo?.mask})</strong> and simulated syncing recent statement charges into your temporary guest ledger.
+            </p>
+
+            <div style={{ background: 'var(--bg-secondary, #F8FAFC)', border: '1px solid var(--border-color)', borderRadius: 10, padding: '16px 18px', margin: '0 0 22px 0', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--google-blue)', marginBottom: 6 }}>
+                <Sparkles size={16} />
+                <span>Experience Real UX with a Full Account</span>
+              </div>
+              <div>
+                Because Guest sessions are strictly ephemeral (no financial data or cards are saved between new visits or refreshes), please <strong>create an account and log in</strong> to experience real UX, connect live institutions, and securely retain all itemized expenses and refund radar traces.
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+                💙 Your feedback is highly appreciated as we build autonomous purchase intelligence!
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                className="primary-btn"
+                onClick={() => {
+                  setShowGuestCardAckModal(false);
+                  setShowAuthModal(true);
+                  setAuthTab('signup');
+                }}
+                style={{ width: '100%', padding: '12px', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <UserCheck size={16} />
+                Create Account & Log In
+              </button>
+
+              <button
+                className="secondary-btn"
+                onClick={() => setShowGuestCardAckModal(false)}
+                style={{ width: '100%', padding: '10px', fontSize: 13 }}
+              >
+                Continue Exploring as Guest
+              </button>
             </div>
           </div>
         </div>

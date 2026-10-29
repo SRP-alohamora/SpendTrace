@@ -194,24 +194,28 @@ class PlaidIntegrationService:
         """
         user_items = CONNECTED_PLAID_ITEMS.get(user_id)
         if not user_items:
-            # Default to Chase & Amex for rich demo experience
-            user_items = [
-                {
-                    "item_id": "item_default_chase",
-                    "institution_id": "ins_chase",
-                    "institution_name": "Chase Bank",
-                    "connected_at": datetime.utcnow().isoformat(),
-                    "accounts": MOCK_INSTITUTIONS[0]["accounts"]
-                },
-                {
-                    "item_id": "item_default_amex",
-                    "institution_id": "ins_amex",
-                    "institution_name": "American Express",
-                    "connected_at": datetime.utcnow().isoformat(),
-                    "accounts": MOCK_INSTITUTIONS[1]["accounts"]
-                }
-            ]
-            CONNECTED_PLAID_ITEMS[user_id] = user_items
+            from backend.db.database import DEMO_ADMIN_ID
+            # Default to Chase & Amex strictly for DEMO_ADMIN_ID for rich walkthroughs
+            if user_id == DEMO_ADMIN_ID:
+                user_items = [
+                    {
+                        "item_id": "item_default_chase",
+                        "institution_id": "ins_chase",
+                        "institution_name": "Chase Bank",
+                        "connected_at": datetime.utcnow().isoformat(),
+                        "accounts": MOCK_INSTITUTIONS[0]["accounts"]
+                    },
+                    {
+                        "item_id": "item_default_amex",
+                        "institution_id": "ins_amex",
+                        "institution_name": "American Express",
+                        "connected_at": datetime.utcnow().isoformat(),
+                        "accounts": MOCK_INSTITUTIONS[1]["accounts"]
+                    }
+                ]
+                CONNECTED_PLAID_ITEMS[user_id] = user_items
+            else:
+                user_items = []
 
         all_accounts = []
         credit_cards = []

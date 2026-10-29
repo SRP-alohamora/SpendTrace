@@ -378,8 +378,15 @@ def list_transactions(
 ):
     """
     Returns transactions belonging strictly to the current user.
-    For a new user, this returns an empty list (0 records).
+    For a guest or new user, this returns an empty list (0 records).
     """
+    if current_user.get("role") == "guest":
+        return {
+            "transactions": [],
+            "count": 0,
+            "user_id": current_user["id"],
+            "is_clean_slate": True
+        }
     txs = get_ledger_transactions(user_id=current_user["id"], limit=limit, category=category)
     return {
         "transactions": txs,
@@ -390,7 +397,9 @@ def list_transactions(
 
 @app.get("/api/v1/refunds/radar")
 def list_refunds(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Returns return reconciliations for current user."""
+    """Returns return reconciliations for current user (strictly clean for guest)."""
+    if current_user.get("role") == "guest":
+        return {"refunds": [], "overdue_count": 0, "user_id": current_user["id"]}
     refunds = get_refund_radar_items(user_id=current_user["id"])
     overdue_count = sum(1 for r in refunds if r["status"] == "overdue_alert")
     return {"refunds": refunds, "overdue_count": overdue_count, "user_id": current_user["id"]}
@@ -858,6 +867,20 @@ def plaid_exchange_public_token(
 @app.get("/api/v1/plaid/accounts")
 def plaid_get_accounts(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Retrieves all connected bank accounts, credit limits, and credit card liabilities."""
+    if current_user.get("role") == "guest":
+        return {
+            "institutions_connected": 0,
+            "accounts": [],
+            "credit_card_liabilities": {
+                "total_credit_balance": 0.0,
+                "total_credit_limit": 0.0,
+                "utilization_percentage": 0.0,
+                "cards": []
+            },
+            "depository_summary": {
+                "total_checking_savings": 0.0
+            }
+        }
     return PlaidIntegrationService.get_connected_accounts_and_liabilities(current_user["id"])
 
 @app.post("/api/v1/plaid/sync")
